@@ -22,12 +22,10 @@ from urllib.parse import urlsplit, urlunsplit
 import xml.etree.ElementTree as ET
 from zoneinfo import ZoneInfo
 
-from mn_short_cloud import (
-    generate_scripts,
-    prepare_narration,
-    request_bytes,
-    strip_tags,
-)
+try:
+    from .mn_short_cloud import generate_scripts, prepare_narration, request_bytes, strip_tags
+except ImportError:  # Direct invocation: python scripts/mn_short_ecosystem.py
+    from mn_short_cloud import generate_scripts, prepare_narration, request_bytes, strip_tags
 
 ROOT = Path(__file__).resolve().parents[1]
 CONFIG_PATH = ROOT / "config" / "mn_short_grid.json"
