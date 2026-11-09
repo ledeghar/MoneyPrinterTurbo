@@ -135,6 +135,7 @@ def assess(folder: Path = OUTPUT) -> dict:
             (editorial or {}).get("source", {}).get("url", "")
         )
         if not (verification.get("claims_verified") is True
+                and verification.get("original_contribution_verified") is True
                 and verification.get("unresolved_claims") == []
                 and len(independent_sources - {original_host}) >= 1
                 and verification.get("source_article_url")
