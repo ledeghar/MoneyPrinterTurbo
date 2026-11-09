@@ -1972,10 +1972,11 @@ def generate_video(
                             left=float(music_gains[0]),
                             right=float(music_gains[-1]),
                         )
-                        return (
-                            frame * float(multiplier)
-                            if np.ndim(t) == 0
-                            else frame * np.asarray(multiplier)[:, None]
+                        if np.ndim(t) == 0:
+                            return frame * float(multiplier)
+                        multiplier = np.asarray(multiplier)
+                        return frame * (
+                            multiplier[:, None] if np.ndim(frame) == 2 else multiplier
                         )
 
                     bgm_clip = bgm_clip.transform(apply_music_ducking, keep_duration=True)
