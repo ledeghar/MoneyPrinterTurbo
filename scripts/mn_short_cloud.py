@@ -13,6 +13,7 @@ import json
 import os
 from pathlib import Path
 import re
+import shutil
 from email.utils import parsedate_to_datetime
 import sys
 import unicodedata
@@ -245,6 +246,9 @@ def collect():
     meta = json.loads(path.read_text(encoding="utf-8"))
     output = Path("mn-short-output")
     output.mkdir(exist_ok=True)
+    research = Path("image-search-results")
+    if research.is_dir():
+        shutil.copytree(research, output / "BUSQUEDA_VISUAL", dirs_exist_ok=True)
     all_videos = sorted(Path("storage/tasks").glob("*/final-1.mp4"), key=lambda p: p.stat().st_mtime)
     if len(all_videos) != 2:
         raise SystemExit(f"Expected exactly two completed shorts, found {len(all_videos)}")
