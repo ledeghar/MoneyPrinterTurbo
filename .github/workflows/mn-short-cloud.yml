@@ -1,0 +1,71 @@
+name: MN Short - Autonomous bilingual video generation (review-only)
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '17 8 * * *'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mn-short-cloud
+  cancel-in-progress: false
+
+jobs:
+  generate-shorts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
+      GEMINI_MODEL: gemini-3.5-flash-lite
+      PYTHONUNBUFFERED: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+
+      - name: Check required credentials without exposing them
+        run: |
+          python - <<'PY'
+          import os, sys
+          missing = [name for name in ('GEMINI_API_KEY','PEXELS_API_KEY') if not os.environ.get(name)]
+          if missing:
+              sys.exit('Missing repository Actions secrets: ' + ', '.join(missing))
+          print('Required generation credentials present')
+          PY
+
+      - name: Select current news item and prepare ES + EN scripts
+        run: python scripts/mn_short_cloud.py prepare
+
+      - name: Install MoneyPrinterTurbo in GitHub runner
+        run: uv sync --frozen --no-dev
+
+      - name: Configure ephemeral video-material credentials
+        run: python scripts/mn_short_cloud.py configure
+
+      - name: Render two vertical videos with music, narration and subtitles
+        run: uv run --no-sync python cli.py --batch-file ./mn_short_tasks.json --stop-at video
+
+      - name: Give exports human-readable names
+        run: python scripts/mn_short_cloud.py collect
+
+      - name: Save finished MP4 files for editorial review
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: MNShort-${{ github.run_number }}-ES-EN
+          path: mn-short-output/
+          if-no-files-found: error
+          retention-days: 3
+          compression-level: 0
+
+# SAFETY: the workflow does NOT auto-publish videos. This prevents publishing
+# unverified news or unreviewed images until editorial checks and YouTube
+# OAuth/upload permissions have been tested. Scheduled runs start only after
+# explicit merge to the repository's default branch and secret configuration.
