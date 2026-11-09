@@ -15,18 +15,19 @@ on:
           - '16:00'
           - '18:00'
           - '20:00'
+  # Prepare 30 minutes before each target release time.
   schedule:
-    - cron: '0 8 * * *'
+    - cron: '30 7 * * *'
       timezone: 'Europe/Madrid'
-    - cron: '0 10 * * *'
+    - cron: '30 9 * * *'
       timezone: 'Europe/Madrid'
-    - cron: '0 12 * * *'
+    - cron: '30 11 * * *'
       timezone: 'Europe/Madrid'
-    - cron: '0 16 * * *'
+    - cron: '30 15 * * *'
       timezone: 'Europe/Madrid'
-    - cron: '0 18 * * *'
+    - cron: '30 17 * * *'
       timezone: 'Europe/Madrid'
-    - cron: '0 20 * * *'
+    - cron: '30 19 * * *'
       timezone: 'Europe/Madrid'
 
 permissions:
@@ -119,7 +120,7 @@ jobs:
           git -C "$RUNNER_TEMP/mnshort-history" push origin HEAD:refs/heads/mnshort-history
 
       - name: OPTIONAL direct public YouTube upload
-        if: ${{ vars.MNSHORT_PUBLICATION_ENABLED == 'true' }}
+        if: ${{ vars.MNSHORT_PUBLICATION_ENABLED == 'true' && github.event_name == 'schedule' }}
         env:
           YOUTUBE_CLIENT_ID: ${{ secrets.YOUTUBE_CLIENT_ID }}
           YOUTUBE_CLIENT_SECRET: ${{ secrets.YOUTUBE_CLIENT_SECRET }}
