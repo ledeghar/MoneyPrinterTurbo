@@ -83,3 +83,75 @@ visual cuando haya resultados.
 Mantener MNSHORT_PUBLICATION_ENABLED en false hasta completar
 estos controles. No se necesita un portátil encendido para ejecutar
 el sistema en GitHub Actions.
+
+
+## Publicación automática preparada para cuando el contenido esté listo
+
+El sistema ya dispone del workflow programado, del uploader OAuth y de
+un **control automático de salida** previo a cualquier envío público:
+
+- Una noticia nueva y un solo MP4 vertical con audio, título y fuente.
+- VERIFICACION_FUENTES.json: comprobación independiente de hechos,
+  afirmaciones sin resolver vacías y evidencia de aportación periodística
+  original, importante para la elegibilidad de monetización.
+- ESCENAS_VERIFICADAS.json: fotografías y escenas con licencia validada,
+  personajes identificados, intervalos sincronizados con la narración
+  y SHA256 del vídeo final para evitar reutilizar evidencias ajenas.
+- CONTROL_PUBLICACION.json/txt: informe APTO_PARA_PROGRAMAR o
+  RETENIDO_PARA_REVISION, incluido en el ZIP del Short.
+
+En este momento **el control RETIENE los vídeos**, ya que todavía falta
+implementar los verificadores de fuentes y la inserción de imágenes
+específicas en el montaje. Pasar la prueba de render no basta.
+
+Con el flujo de validación completo, las ejecuciones programadas podrán
+subir los vídeos como privados, con publishAt al horario solicitado,
+**sin pasos manuales por vídeo**, siempre que estén presentes:
+1. MNSHORT_SCHEDULE_ENABLED=true (variable de GitHub Actions).
+2. MNSHORT_PUBLICATION_ENABLED=true (variable de GitHub Actions).
+3. Secrets YOUTUBE_CLIENT_ID, YOUTUBE_CLIENT_SECRET,
+   YOUTUBE_REFRESH_TOKEN, obtenidos autorizando el canal MN Short
+   con el alcance youtube.upload.
+4. Aprobación real del control de salida de esa producción.
+
+La conexión OAuth requiere intervención del titular del canal; no se
+puede deducir de la cuenta de GitHub ni de la clave Gemini. No introducir
+secretos en el repositorio ni en mensajes. Si el envío se retrasa más allá
+de la ventana previa a la publicación, se cancela esa franja.
+
+## Informe automático de visualizaciones e ingresos
+
+Se ha preparado otro workflow:
+.github/workflows/mn-short-channel-analytics.yml
+
+Podrá producir cada día, a las 22:10 de Madrid, el paquete:
+- INGRESOS_Y_VISUALIZACIONES.txt: cifras legibles desde el móvil
+- canal_90_dias.json: datos completos y errores de API
+- tendencia_diaria.csv: visualizaciones e ingresos por fecha
+
+Solo se activa al crear MNSHORT_ANALYTICS_ENABLED=true como variable
+de Actions, y además requiere YOUTUBE_CLIENT_ID y YOUTUBE_CLIENT_SECRET
+y el secret **YOUTUBE_ANALYTICS_REFRESH_TOKEN** (credencial diferente
+de la publicación, concedida en lectura con los scopes
+youtube.readonly, yt-analytics.readonly y
+yt-analytics-monetary.readonly).
+
+El reporte diferencia claramente datos ausentes de 0, muestra cifras
+**estimadas** en EUR, no pagos recibidos ni YPP confirmado. Comprende
+por defecto todas las estadísticas del canal autorizado, no únicamente
+los vídeos producidos por MN Short.
+
+**Ingresos reales por anuncios Shorts:** los requisitos generales de
+participación/reparto publicitario incluyen 1000 suscriptores y
+10 millones de visualizaciones públicas válidas de Shorts en 90 días,
+o la vía correspondiente de vídeo largo, y la aceptación del canal
+en YPP. El umbral ampliado de 500 suscriptores / 3 millones de Shorts
+permite algunas funciones de financiación de fans, no el reparto
+publicitario completo. El titular debe comprobar su elegibilidad y
+tramitar la adhesión en YouTube Studio > Ingresos.
+
+La política de YouTube no considera monetizable el contenido genérico
+repetitivo producido en masa; es imprescindible aportar contexto y valor
+periodístico originales, variedad y tratamiento visual correcto.
+Fuente: https://support.google.com/youtube/answer/1311392?hl=es-SP
+Umbrales: https://support.google.com/youtube/answer/94522?hl=es-ES
