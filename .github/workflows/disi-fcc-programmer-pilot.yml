@@ -67,10 +67,18 @@ jobs:
           mkdir -p fcc-programmer-output
           git diff --binary > fcc-programmer-output/agent.patch
           git diff --name-only > fcc-programmer-output/modified-files.txt
-          if [ -n "$(git ls-files --others --exclude-standard | grep -v '^fcc-programmer-output/' || true)" ]; then
-            echo "Agent created unexpected untracked files. Rejecting." | tee -a fcc-programmer-output/validation.txt
-            exit 1
-          fi
+          # Untracked files are not part of git diff and must never be packaged
+          # as code. Claude CLI can create local metadata: record NAMES for
+          # auditing but do not treat ephemeral metadata as repository edits.
+          git ls-files --others --exclude-standard -z | python3 -c '
+          import json, pathlib, sys
+          paths = [p.decode("utf-8", "replace") for p in sys.stdin.buffer.read().split(bytes([0])) if p]
+          paths = [p for p in paths if not p.startswith("fcc-programmer-output/")]
+          pathlib.Path("fcc-programmer-output/excluded-untracked-paths.json").write_text(
+              json.dumps(paths, indent=2, ensure_ascii=False) + chr(10), encoding="utf-8"
+          )
+          '
+          echo "Untracked runner files are excluded from the patch artifact."
           if grep -vE '^(scripts/mn_short_image_search.py|test/services/test_mn_short_image_search.py)$' fcc-programmer-output/modified-files.txt | grep -q .; then
             echo "Agent modified disallowed files. Rejecting." | tee -a fcc-programmer-output/validation.txt
             exit 1
@@ -79,13 +87,22 @@ jobs:
             echo "Agent generated no tracked code modifications" | tee -a fcc-programmer-output/validation.txt
             exit 1
           fi
-          echo 'Changes limited to allowed files. No GitHub write performed.' | tee -a fcc-programmer-output/validation.txt
+          git diff --check
+          echo 'Tracked changes limited to allowed files. Untracked files excluded; no GitHub write performed.' | tee -a fcc-programmer-output/validation.txt
       - name: Test produced code using free local pytest
         if: success()
         shell: bash
         run: |
           python -m pip install --disable-pip-version-check pytest
-          python -m pytest test/services/test_mn_short_image_search.py -q 2>&1 | tee fcc-programmer-output/pytest.txt
+          # Validate *only* the reviewable patch in an independent clean worktree.
+          # No untracked files, ignored runner metadata or agent sidecars follow.
+          git worktree add --detach "$RUNNER_TEMP/disi-fcc-clean-test" "$GITHUB_SHA"
+          (
+            cd "$RUNNER_TEMP/disi-fcc-clean-test"
+            git apply --check "$GITHUB_WORKSPACE/fcc-programmer-output/agent.patch"
+            git apply "$GITHUB_WORKSPACE/fcc-programmer-output/agent.patch"
+            timeout 180s python -m pytest test/services/test_mn_short_image_search.py -q
+          ) 2>&1 | tee fcc-programmer-output/pytest.txt
       - name: Save agent report, patch and test results for human review
         if: always()
         uses: actions/upload-artifact@v4
