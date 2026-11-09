@@ -1,0 +1,97 @@
+name: DISI - Free Claude Code read-only pilot
+
+# Explicit invocation only. No scheduled jobs, commits, publication or uploads.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: disi-fcc-readonly-pilot
+  cancel-in-progress: false
+
+jobs:
+  review-visual-research:
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    env:
+      NVIDIA_NIM_API_KEY: ${{ secrets.NVIDIA_NIM_API_KEY }}
+      MODEL: nvidia_nim/nvidia/nemotron-3-ultra-550b-a55b
+      HOST: 127.0.0.1
+      FCC_OPEN_BROWSER: 'false'
+      MESSAGING_PLATFORM: none
+      PROXY_AUTH_ENABLED: 'true'
+      ENABLE_WEB_SERVER_TOOLS: 'false'
+      LOG_RAW_API_PAYLOADS: 'false'
+      LOG_RAW_SSE_EVENTS: 'false'
+      CI: 'true'
+
+    steps:
+      - name: Checkout repository (read-only token)
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Verify user-provided free-tier API key exists
+        run: |
+          if [ -z "$NVIDIA_NIM_API_KEY" ]; then
+            echo "Missing NVIDIA_NIM_API_KEY Actions secret. No installation or API call performed." >&2
+            exit 1
+          fi
+
+      - name: Prepare isolated FCC proxy token
+        shell: bash
+        run: |
+          TOKEN="$(openssl rand -hex 32)"
+          echo "::add-mask::$TOKEN"
+          echo "ANTHROPIC_AUTH_TOKEN=$TOKEN" >> "$GITHUB_ENV"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+
+      - name: Install required FCC Python version
+        run: uv python install 3.14.10
+
+      - name: Install pinned Free Claude Code 6.19.4
+        run: |
+          uv tool install --python 3.14.10 "free-claude-code==6.19.4"
+          fcc-server --version
+
+      - name: Install Node.js for Claude Code CLI
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install Claude Code command-line client
+        # Experimental pilot. Pin the CLI too after verifying a working release.
+        run: npm install -g @anthropic-ai/claude-code
+
+      - name: Read-only agent audit of existing editorial image module
+        shell: bash
+        run: |
+          mkdir -p fcc-artifacts
+          printf '# DISI FCC read-only review\n\n' > fcc-artifacts/report.md
+          printf 'GitHub run: %s\n\n' "$GITHUB_RUN_ID" >> fcc-artifacts/report.md
+          PROMPT="$(cat .github/fcc/visual-research-review.md)"
+          timeout 420s fcc-claude \
+            --print \
+            --permission-mode plan \
+            --tools 'Read,Grep,Glob' \
+            --allowedTools 'Read,Grep,Glob' \
+            --max-turns 8 \
+            "$PROMPT" >> fcc-artifacts/report.md
+          test "$(wc -c < fcc-artifacts/report.md)" -gt 150
+
+      - name: Upload proposed findings (not code changes)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: DISI-FCC-ReadOnly-Review-${{ github.run_number }}
+          path: fcc-artifacts/report.md
+          if-no-files-found: warn
+          retention-days: 3
+
+# This pilot executes on a disposable Actions runner with contents:read.
+# Any later write-capable agent requires a separate reviewed workflow and
+# isolated PR branch. Never provide DISIM/private repository credentials here.
