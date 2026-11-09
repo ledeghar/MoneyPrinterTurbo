@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Editorial image *discovery* from exact named subjects (review-only).
+"""Dynamic editorial image discovery for the story selected by MN Short.
 
-Requires the open-source 'ddgs' package. No API keys.
-A search-result caption is not proof of the photo's identity or license.
-Never silently substitute generic photos for a named subject.
+Reads the Gemini editorial JSON produced in the *same* GitHub Actions run.
+Subjects are extracted from the current article; no fixed names or manual inputs.
+Returns source-page and image URLs for review, never a grant of reuse rights.
 """
 from __future__ import annotations
 
@@ -22,7 +22,7 @@ def words(text: str) -> list[str]:
 
 
 def exact_subject_match(title: str, subject: str) -> bool:
-    """Require full contiguous subject name, not only company/industry proximity."""
+    """A full-name reference is required for portraits, not merely the employer."""
     needle, haystack = words(subject), words(title)
     return bool(needle and len(haystack) >= len(needle) and any(
         haystack[i:i + len(needle)] == needle
@@ -33,33 +33,88 @@ def exact_subject_match(title: str, subject: str) -> bool:
 def valid_public_url(url: str) -> bool:
     try:
         parsed = urlparse(url)
-        return parsed.scheme == "https" and bool(parsed.hostname) and not (
-            parsed.hostname in {"localhost", "127.0.0.1"}
-            or parsed.hostname.startswith("127.")
+        hostname = (parsed.hostname or "").lower()
+        return parsed.scheme == "https" and bool(hostname) and not (
+            hostname == "localhost"
+            or hostname.startswith(("127.", "10.", "192.168.", "169.254.", "172.16."))
         )
     except ValueError:
         return False
 
 
-def find_candidates(subject: str, context: str, limit: int = 12) -> list[dict]:
+def editorial_subjects(editorial: dict) -> list[dict]:
+    """Take only subjects grounded in the selected news source AND spoken script."""
+    source = editorial.get("source") or {}
+    generated = editorial.get("generated") or {}
+    source_text = f"{source.get('title', '')} {source.get('description', '')}"
+    scripts_text = f"{generated.get('script_es', '')} {generated.get('script_en', '')}"
+    people_and_entities = generated.get("visual_subjects") or []
+    selected, seen = [], set()
+    if not isinstance(people_and_entities, list):
+        people_and_entities = []
+    for item in people_and_entities[:8]:
+        if not isinstance(item, dict):
+            continue
+        name = str(item.get("name") or "").strip()
+        kind = str(item.get("kind") or "").strip().lower()
+        context = str(item.get("context") or "").strip()
+        if not (4 <= len(name) <= 100) or kind not in {"person", "organization", "place", "event"}:
+            continue
+        if not exact_subject_match(source_text, name):
+            continue
+        if not exact_subject_match(scripts_text, name):
+            continue
+        if kind == "person" and len(words(name)) < 2:
+            # Single-word names are too ambiguous to select a real person's portrait.
+            continue
+        if name.lower() in seen:
+            continue
+        seen.add(name.lower())
+        selected.append({"name": name, "kind": kind, "context": context[:120]})
+        if len(selected) == 5:
+            break
+    # On an unfamiliar story without a named subject we can still search its
+    # exact news headline, but results are unverified and never treated as
+    # portraits or approved video material.
+    if not selected:
+        headline = str(source.get("title") or "").strip()
+        if headline:
+            selected.append({
+                "name": headline[:160],
+                "kind": "event",
+                "context": str(source.get("publisher") or "")[:120],
+                "fallback": "No source-grounded and spoken named subject was found",
+            })
+    return selected
+
+
+def find_candidates(subject: str, context: str, kind: str = "person", limit: int = 6) -> list[dict]:
     from ddgs import DDGS
 
-    # Filter by subject in the actual search result title. The image URL alone
-    # is often generic; a company logo does not count as a person's portrait.
-    query = f'"{subject}" {context} editorial portrait photo'
+    if kind == "person":
+        query = f'"{subject}" {context} photo'
+    elif kind == "event":
+        query = f"{subject} {context} photo"
+    else:
+        query = f'"{subject}" {context} photo'
     with DDGS(timeout=15) as search:
         results = search.images(
-            query=query, max_results=35, safesearch="moderate",
+            query=query[:230], max_results=25, safesearch="moderate",
             backend="auto", type_image="photo",
         )
+
     selected, seen = [], set()
     for entry in results:
         title = str(entry.get("title") or "").strip()
         image = str(entry.get("image") or "")
         page = str(entry.get("url") or "")
-        if not exact_subject_match(title, subject):
+        if kind in {"person", "organization", "place"} and not exact_subject_match(title, subject):
             continue
-        if not (valid_public_url(image) and valid_public_url(page)):
+        if kind == "event":
+            overlap = set(words(title)).intersection(set(words(subject)))
+            if len(overlap) < 2:
+                continue
+        if not title or not (valid_public_url(image) and valid_public_url(page)):
             continue
         key = image.lower()
         if key in seen:
@@ -67,6 +122,8 @@ def find_candidates(subject: str, context: str, limit: int = 12) -> list[dict]:
         seen.add(key)
         selected.append({
             "subject": subject,
+            "kind": kind,
+            "search_query": query,
             "title": title[:400],
             "image_url": image,
             "source_page": page,
@@ -84,50 +141,61 @@ def find_candidates(subject: str, context: str, limit: int = 12) -> list[dict]:
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--subject", required=True, help="Full person name, e.g. Jensen Huang")
-    ap.add_argument("--context", default="", help="Company or event, e.g. Nvidia")
+    ap.add_argument("--editorial", default="mn_short_editorial.json",
+                    help="News and Gemini scripts generated by this Actions run")
     ap.add_argument("--output", default="image-search-results")
     args = ap.parse_args()
-    if len(args.subject.strip()) < 4 or len(args.subject) > 120:
-        ap.error("Provide a full person name, maximum 120 characters")
-    if len(args.context) > 160:
-        ap.error("Context is too long")
+
+    editorial = json.loads(Path(args.editorial).read_text(encoding="utf-8"))
+    source = editorial.get("source") or {}
+    subjects = editorial_subjects(editorial)
+    searched = []
+    for item in subjects:
+        subject, kind, context = item["name"], item["kind"], item["context"]
+        try:
+            candidates = find_candidates(subject, context, kind)
+            error = None
+        except Exception as exc:
+            candidates, error = [], f"{type(exc).__name__}: {str(exc)[:300]}"
+        searched.append({**item, "candidates": candidates, "error": error})
+        print(f"Editorial subject: {kind} {subject!r} — {len(candidates)} image candidates")
+
     out = Path(args.output)
     out.mkdir(parents=True, exist_ok=True)
-    try:
-        candidates = find_candidates(args.subject.strip(), args.context.strip())
-        error = None
-    except Exception as exc:
-        candidates, error = [], f"{type(exc).__name__}: {str(exc)[:400]}"
     manifest = {
-        "query_subject": args.subject, "context": args.context,
+        "source_title": source.get("title"),
+        "source_url": source.get("url"),
+        "source_publisher": source.get("publisher"),
         "searched_at_utc": datetime.now(timezone.utc).isoformat(),
-        "search_service": "DDGS (Bing/DuckDuckGo images)",
-        "rights_policy": "Search results are NOT a reuse license. Check original source rights before downloads/publication.",
-        "candidates": candidates,
-        "error": error,
+        "search_service": "DDGS image search (Bing/DuckDuckGo)",
+        "subject_detection": "Gemini from current article + narration; strict source/spoken grounding",
+        "publication_policy": "Discovery only: original page, identity and licensing require verification",
+        "subjects": searched,
     }
-    (out / "candidates.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
+    (out / "visual_research.json").write_text(
+        json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
     lines = [
-        f"IMAGE RESEARCH: {args.subject} ({args.context})",
-        f"Candidates: {len(candidates)}",
-        "Candidates are NOT yet cleared for publication or independently identity-verified.",
+        "MN SHORT — BÚSQUEDA DINÁMICA DE IMÁGENES",
+        "Noticia: " + str(source.get("title") or ""),
+        "Fuente: " + str(source.get("url") or ""),
+        "Protagonistas detectados automáticamente: " + str(len(subjects)),
+        "ATENCIÓN: estas imágenes aún NO están verificadas ni autorizadas para publicación.",
         "",
     ]
-    if error:
-        lines += ["Search error: " + error]
-    for index, item in enumerate(candidates, start=1):
-        lines += [
-            f"{index}. {item['title']}",
-            f"    Source: {item['source_page']}",
-            f"    Image: {item['image_url']}",
-            "    Rights: UNVERIFIED — review before use",
-            "",
-        ]
+    for item in searched:
+        lines += [f"{item['kind'].upper()}: {item['name']} ({item['context']})"]
+        if item["error"]:
+            lines += ["Error de búsqueda: " + item["error"]]
+        for i, candidate in enumerate(item["candidates"], 1):
+            lines += [
+                f"  {i}. {candidate['title']}",
+                f"     Foto: {candidate['image_url']}",
+                f"     Página de origen: {candidate['source_page']}",
+            ]
+        lines += [""]
     (out / "RESULTADOS.txt").write_text("\ufeff" + "\n".join(lines), encoding="utf-8")
-    print(f"Search completed: {len(candidates)} exact-name photo candidates.")
-    if error:
-        raise SystemExit(f"Image search failed; details saved to RESULTS: {error}")
+    print("Editorial image research saved; no images downloaded or published.")
 
 
 if __name__ == "__main__":

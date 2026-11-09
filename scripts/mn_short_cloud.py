@@ -13,6 +13,7 @@ import json
 import os
 from pathlib import Path
 import re
+import shutil
 from email.utils import parsedate_to_datetime
 import sys
 import unicodedata
@@ -110,9 +111,15 @@ def generate_scripts(source: dict):
         "Never invent data, statistics, quotes, event details, dates, or independent confirmations. "
         "Attribute uncertain claims to the named source. If evidence is too thin, return the exact "
         "JSON object {\"skip\":true}. Otherwise return ONLY JSON with keys "
-        "title_es, title_en, script_es, script_en, terms_es, terms_en. "
+        "title_es, title_en, script_es, script_en, terms_es, terms_en, visual_subjects. "
         "Both scripts must contain 75-95 words, have an engaging but non-clickbait opening, "
         "attribute the reported event, and finish with 'MN Short.' or a natural equivalent. Use short, naturally spoken sentences of 8-18 words with clear full stops. Avoid sentences longer than 22 words, forced clauses, and abbreviations that a synthetic narrator would mispronounce. "
+        "visual_subjects must be a list of zero to five objects with keys name, kind, context, "
+        "ordered by first mention in the script; kind is person, organization, place, or event. "
+        "For people, name MUST be the person's full name explicitly present in the source "
+        "and spoken in the generated narration. Never invent people or name a brand as a person. "
+        "For each visual subject, context is a short disambiguation supported by the source. "
+        "Do not include generic subjects such as businessman, office, technology. "
         "Each terms value must be an array of six English-language, Pexels-friendly, concrete "
         "stock-video search terms in narrative order; avoid misleading stock depictions. "
         "The title must be under 90 characters and not overstate the source. "
@@ -159,6 +166,8 @@ def generate_scripts(source: dict):
             raise SystemExit(f"Invalid Pexels keywords in {lang}")
         if len(result[f"script_{lang}"].split()) > 140:
             raise SystemExit(f"Script too long in {lang}")
+    raw_subjects = result.get("visual_subjects", [])
+    result["visual_subjects"] = raw_subjects[:5] if isinstance(raw_subjects, list) else []
     return result
 
 
@@ -237,6 +246,9 @@ def collect():
     meta = json.loads(path.read_text(encoding="utf-8"))
     output = Path("mn-short-output")
     output.mkdir(exist_ok=True)
+    research = Path("image-search-results")
+    if research.is_dir():
+        shutil.copytree(research, output / "BUSQUEDA_VISUAL", dirs_exist_ok=True)
     all_videos = sorted(Path("storage/tasks").glob("*/final-1.mp4"), key=lambda p: p.stat().st_mtime)
     if len(all_videos) != 2:
         raise SystemExit(f"Expected exactly two completed shorts, found {len(all_videos)}")
