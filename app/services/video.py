@@ -43,6 +43,7 @@ from app.models.schema import (
     VideoTransitionMode,
 )
 from app.services import bgm as bgm_service
+from app.services.audio_mastering import prepare_audio_mix
 from app.services.utils import subtitle_shaping, video_effects
 from app.utils import file_security, logging_utils, utils
 from app.utils.subtitle_reader import moviepy_subtitles
@@ -1951,6 +1952,42 @@ def generate_video(
                 bgm_effects.append(afx.AudioFadeOut(3))
                 bgm_source_clip = clip_stack.enter_context(AudioFileClip(bgm_file))
                 bgm_clip = bgm_source_clip.with_effects(bgm_effects)
+                # MN Short: auto-master narration and duck music under speech.
+                # The 8 kHz analysis is lightweight even on low-memory PCs.
+                try:
+                    sample_rate = 8000
+                    speech_samples = voice_source_clip.to_soundarray(fps=sample_rate)
+                    requested_gain = 1.0 if params.voice_volume is None else float(params.voice_volume)
+                    safe_gain, speech_times, music_gains = prepare_audio_mix(
+                        speech_samples, sample_rate, requested_gain
+                    )
+                    audio_clip = voice_source_clip.with_effects(
+                        [afx.MultiplyVolume(safe_gain)]
+                    )
+
+                    def apply_music_ducking(get_frame, t):
+                        frame = get_frame(t)
+                        multiplier = np.interp(
+                            t, speech_times, music_gains,
+                            left=float(music_gains[0]),
+                            right=float(music_gains[-1]),
+                        )
+                        if np.ndim(t) == 0:
+                            return frame * float(multiplier)
+                        multiplier = np.asarray(multiplier)
+                        return frame * (
+                            multiplier[:, None] if np.ndim(frame) == 2 else multiplier
+                        )
+
+                    bgm_clip = bgm_clip.transform(apply_music_ducking, keep_duration=True)
+                    logger.info(
+                        f"automatic audio ducking enabled; requested voice gain="
+                        f"{requested_gain:.2f}, safe gain={safe_gain:.2f}"
+                    )
+                except Exception:
+                    # Keep the original soundtrack pipeline operational if the
+                    # audio analysis fails for an unusual input format.
+                    logger.exception("automatic audio ducking failed; using original mix")
                 audio_clip = CompositeAudioClip([audio_clip, bgm_clip])
             except Exception:
                 bgm_mix_succeeded = False
