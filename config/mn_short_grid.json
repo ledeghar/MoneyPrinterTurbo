@@ -1,0 +1,123 @@
+{
+  "timezone": "Europe/Madrid",
+  "language": "es",
+  "video_count_per_slot": 1,
+  "windows": [
+    {
+      "time": "08:00",
+      "topic": "news",
+      "label": "Noticias de actualidad"
+    },
+    {
+      "time": "10:00",
+      "topic": "technology",
+      "label": "Tecnología e IA"
+    },
+    {
+      "time": "12:00",
+      "topic": "world",
+      "label": "Noticias internacionales"
+    },
+    {
+      "time": "16:00",
+      "topic": "society",
+      "label": "Sociedad"
+    },
+    {
+      "time": "18:00",
+      "topic": "cinema",
+      "label": "Cine"
+    },
+    {
+      "time": "20:00",
+      "topic": "technology_or_gaming",
+      "label": "Tecnología o gaming, alternando días"
+    }
+  ],
+  "feeds": {
+    "news": [
+      {
+        "publisher": "BBC News",
+        "url": "https://feeds.bbci.co.uk/news/rss.xml"
+      },
+      {
+        "publisher": "The Guardian",
+        "url": "https://www.theguardian.com/world/rss"
+      },
+      {
+        "publisher": "Al Jazeera",
+        "url": "https://www.aljazeera.com/xml/rss/all.xml"
+      }
+    ],
+    "world": [
+      {
+        "publisher": "BBC World",
+        "url": "https://feeds.bbci.co.uk/news/world/rss.xml"
+      },
+      {
+        "publisher": "The Guardian World",
+        "url": "https://www.theguardian.com/world/rss"
+      },
+      {
+        "publisher": "France 24",
+        "url": "https://www.france24.com/en/rss"
+      }
+    ],
+    "technology": [
+      {
+        "publisher": "TechCrunch",
+        "url": "https://techcrunch.com/feed/"
+      },
+      {
+        "publisher": "Ars Technica",
+        "url": "https://feeds.arstechnica.com/arstechnica/technology-lab"
+      },
+      {
+        "publisher": "The Guardian Technology",
+        "url": "https://www.theguardian.com/uk/technology/rss"
+      },
+      {
+        "publisher": "BBC Technology",
+        "url": "https://feeds.bbci.co.uk/news/technology/rss.xml"
+      }
+    ],
+    "society": [
+      {
+        "publisher": "The Guardian Society",
+        "url": "https://www.theguardian.com/society/rss"
+      },
+      {
+        "publisher": "BBC Health",
+        "url": "https://feeds.bbci.co.uk/news/health/rss.xml"
+      },
+      {
+        "publisher": "The Guardian Education",
+        "url": "https://www.theguardian.com/education/rss"
+      }
+    ],
+    "cinema": [
+      {
+        "publisher": "The Guardian Film",
+        "url": "https://www.theguardian.com/uk/film/rss"
+      },
+      {
+        "publisher": "IGN Movies",
+        "url": "https://feeds.feedburner.com/ign/movies-articles"
+      }
+    ],
+    "gaming": [
+      {
+        "publisher": "IGN Games",
+        "url": "https://feeds.feedburner.com/ign/games-all"
+      },
+      {
+        "publisher": "PC Gamer",
+        "url": "https://www.pcgamer.com/feeds.xml"
+      },
+      {
+        "publisher": "The Guardian Games",
+        "url": "https://www.theguardian.com/games/rss"
+      }
+    ]
+  }
+}
