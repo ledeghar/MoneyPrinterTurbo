@@ -1,7 +1,5 @@
 """Tests for the one-Short-per-slot news scheduler; network is never used."""
-from datetime import datetime, timedelta, timezone
-import json
-from pathlib import Path
+from datetime import datetime, timezone
 
 import pytest
 
