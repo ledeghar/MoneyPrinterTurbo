@@ -1,0 +1,149 @@
+name: MN Short - Six editorial Shorts per day (ES)
+
+on:
+  workflow_dispatch:
+    inputs:
+      slot:
+        description: 'Select ONE editorial slot (manual cloud test)'
+        required: true
+        type: choice
+        default: '08:00'
+        options:
+          - '08:00'
+          - '10:00'
+          - '12:00'
+          - '16:00'
+          - '18:00'
+          - '20:00'
+  schedule:
+    - cron: '0 8 * * *'
+      timezone: 'Europe/Madrid'
+    - cron: '0 10 * * *'
+      timezone: 'Europe/Madrid'
+    - cron: '0 12 * * *'
+      timezone: 'Europe/Madrid'
+    - cron: '0 16 * * *'
+      timezone: 'Europe/Madrid'
+    - cron: '0 18 * * *'
+      timezone: 'Europe/Madrid'
+    - cron: '0 20 * * *'
+      timezone: 'Europe/Madrid'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: mn-short-six-beats
+  cancel-in-progress: false
+
+jobs:
+  produce-one-short:
+    # Scheduled runs are inactive until review and explicit repository opt-in.
+    if: ${{ github.event_name == 'workflow_dispatch' || vars.MNSHORT_SCHEDULE_ENABLED == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 65
+    env:
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
+      GEMINI_MODEL: gemini-3.5-flash-lite
+      PYTHONUNBUFFERED: '1'
+      MNSHORT_PUBLICATION_ENABLED: ${{ vars.MNSHORT_PUBLICATION_ENABLED }}
+      CRON_EXPR: ${{ github.event.schedule }}
+      INPUT_SLOT: ${{ inputs.slot }}
+    steps:
+      - name: Fetch newsroom code
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install UV
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+
+      - name: Restore deduplication history
+        run: |
+          git fetch --no-tags origin refs/heads/mnshort-history:refs/remotes/origin/mnshort-history
+          git show refs/remotes/origin/mnshort-history:mnshort-history.json > mnshort-history.json
+          python - <<'PY'
+          import json
+          records=json.load(open("mnshort-history.json", encoding="utf-8"))
+          assert isinstance(records["items"], list)
+          print("History restored, previous records:", len(records["items"]))
+          PY
+
+      - name: Check existing production credentials
+        run: |
+          python - <<'PY'
+          import os,sys
+          missing=[x for x in ("GEMINI_API_KEY","PEXELS_API_KEY") if not os.environ.get(x)]
+          if missing: sys.exit("Missing Actions secrets: "+", ".join(missing))
+          print("Cloud generation credentials present")
+          PY
+
+      - name: Select current category and an unused news story
+        run: python scripts/mn_short_ecosystem.py prepare --slot "$INPUT_SLOT" --cron "$CRON_EXPR"
+
+      - name: Find specific image references for the selected story
+        continue-on-error: true
+        run: |
+          python -m pip install --disable-pip-version-check "ddgs>=9,<12"
+          python scripts/mn_short_image_search.py --editorial mn_short_editorial.json
+
+      - name: Install MoneyPrinterTurbo in runner
+        run: uv sync --frozen --no-dev
+
+      - name: Configure ephemeral Pexels key
+        run: python scripts/mn_short_cloud.py configure
+
+      - name: Render one Spanish vertical Short
+        run: uv run --no-sync python cli.py --batch-file ./mn_short_tasks.json --stop-at video
+
+      - name: Package one MP4, source and metadata
+        id: pack
+        run: python scripts/mn_short_ecosystem.py package
+
+      - name: Save persistent history on separate branch
+        run: |
+          git fetch --no-tags origin refs/heads/mnshort-history:refs/remotes/origin/mnshort-history
+          git worktree add --detach "$RUNNER_TEMP/mnshort-history" refs/remotes/origin/mnshort-history
+          cp mnshort-history.json "$RUNNER_TEMP/mnshort-history/mnshort-history.json"
+          git -C "$RUNNER_TEMP/mnshort-history" add mnshort-history.json
+          git -C "$RUNNER_TEMP/mnshort-history" \
+            -c user.name="MN Short Editorial Bot" \
+            -c user.email="mnshort-bot@users.noreply.github.com" \
+            commit -m "Record one MN Short production [skip ci]"
+          git -C "$RUNNER_TEMP/mnshort-history" push origin HEAD:refs/heads/mnshort-history
+
+      - name: OPTIONAL direct public YouTube upload
+        if: ${{ vars.MNSHORT_PUBLICATION_ENABLED == 'true' }}
+        env:
+          YOUTUBE_CLIENT_ID: ${{ secrets.YOUTUBE_CLIENT_ID }}
+          YOUTUBE_CLIENT_SECRET: ${{ secrets.YOUTUBE_CLIENT_SECRET }}
+          YOUTUBE_REFRESH_TOKEN: ${{ secrets.YOUTUBE_REFRESH_TOKEN }}
+        run: |
+          python - <<'PY'
+          import os,sys
+          missing=[x for x in ("YOUTUBE_CLIENT_ID","YOUTUBE_CLIENT_SECRET","YOUTUBE_REFRESH_TOKEN") if not os.environ.get(x)]
+          if missing: sys.exit("Publication not configured: "+", ".join(missing))
+          PY
+          uv run --no-sync python scripts/mn_short_publish_scheduled.py
+
+      - name: Archive one MP4 and its editorial report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.pack.outputs.artifact_name || 'MNShort-editorial-run' }}
+          path: mn-short-output/
+          if-no-files-found: warn
+          retention-days: 7
+          compression-level: 0
+
+# GitHub Actions repository Variables:
+# MNSHORT_SCHEDULE_ENABLED=true -> enable six-slot cloud generation.
+# MNSHORT_PUBLICATION_ENABLED=true -> public YouTube uploads, only after
+# OAuth keys and automated editorial/visual checks have been validated.
+# No public publishing occurs by default.
