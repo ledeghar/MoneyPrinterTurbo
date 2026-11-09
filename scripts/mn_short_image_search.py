@@ -13,7 +13,9 @@ import json
 from pathlib import Path
 import re
 import unicodedata
-from urllib.parse import urlparse
+from html.parser import HTMLParser
+from urllib.parse import urljoin, urlparse
+from urllib.request import Request, urlopen
 
 
 def words(text: str) -> list[str]:
@@ -64,6 +66,9 @@ def editorial_subjects(editorial: dict) -> list[dict]:
             continue
         if not exact_subject_match(scripts_text, name):
             continue
+        if kind == "place" and not exact_subject_match(source.get("title", ""), name):
+            # 'Utah' alone is not evidence of the actual facility reported on.
+            continue
         if kind == "person" and len(words(name)) < 2:
             # Single-word names are too ambiguous to select a real person's portrait.
             continue
@@ -88,54 +93,126 @@ def editorial_subjects(editorial: dict) -> list[dict]:
     return selected
 
 
+class ArticleImageParser(HTMLParser):
+    """Extract an article's declared lead image, not its arbitrary inline graphics."""
+
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.images = []
+
+    def handle_starttag(self, tag, attrs):
+        if tag.lower() != "meta":
+            return
+        props = {key.lower(): value for key, value in attrs if key and value}
+        label = (props.get("property") or props.get("name") or "").lower()
+        if label in {"og:image", "og:image:secure_url", "twitter:image"}:
+            self.images.append((label, props.get("content", "")))
+
+
+def article_lead_image(article_url: str) -> dict | None:
+    """Check the RSS publisher's original article for its declared main image.
+
+    This is a *candidate*, never automatic proof of what the photo depicts
+    nor evidence that the publisher licenses it for reuse.
+    """
+    parsed = urlparse(article_url)
+    host = (parsed.hostname or "").lower()
+    trusted_hosts = {
+        "techcrunch.com", "www.techcrunch.com",
+        "arstechnica.com", "www.arstechnica.com",
+        "theverge.com", "www.theverge.com",
+    }
+    if parsed.scheme != "https" or host not in trusted_hosts:
+        return None
+    request = Request(
+        article_url, headers={
+            "User-Agent": "Mozilla/5.0 (compatible; MNShortEditorialResearch/0.2)",
+            "Accept": "text/html",
+        }
+    )
+    try:
+        with urlopen(request, timeout=12) as response:
+            if "text/html" not in response.headers.get("Content-Type", "").lower():
+                return None
+            html = response.read(2_000_000).decode("utf-8", errors="replace")
+    except (OSError, ValueError):
+        return None
+    parser = ArticleImageParser()
+    parser.feed(html)
+    for label, raw_url in parser.images:
+        url = urljoin(article_url, raw_url)
+        if valid_public_url(url):
+            return {
+                "kind": "article_image",
+                "image_url": url,
+                "source_page": article_url,
+                "image_meta": label,
+                "identity": "UNVERIFIED_SOURCE_ARTICLE_LEAD_IMAGE",
+                "license": "UNVERIFIED",
+                "approved_for_publication": False,
+            }
+    return None
+
+
 def find_candidates(subject: str, context: str, kind: str = "person", limit: int = 6) -> list[dict]:
     from ddgs import DDGS
 
-    if kind == "person":
-        query = f'"{subject}" {context} photo'
+    # Prioritize the full subject, then try a cleaner query when the detailed
+    # one produces no match. Do not accept generic stock as the named subject.
+    if kind == "organization":
+        queries = [
+            f'"{subject}" geothermal power plant photo' if "geothermal" in context.lower() else f'"{subject}" {context} company photo',
+            f'"{subject}" official facilities photo',
+        ]
+    elif kind == "person":
+        queries = [f'"{subject}" {context} portrait photo', f'"{subject}" headshot photograph']
     elif kind == "event":
-        query = f"{subject} {context} photo"
+        queries = [f'"{subject}" {context} news photo']
     else:
-        query = f'"{subject}" {context} photo'
-    with DDGS(timeout=15) as search:
-        results = search.images(
-            query=query[:230], max_results=25, safesearch="moderate",
-            backend="auto", type_image="photo",
-        )
+        queries = [f'"{subject}" {context} photo']
 
     selected, seen = [], set()
-    for entry in results:
-        title = str(entry.get("title") or "").strip()
-        image = str(entry.get("image") or "")
-        page = str(entry.get("url") or "")
-        if kind in {"person", "organization", "place"} and not exact_subject_match(title, subject):
-            continue
-        if kind == "event":
-            overlap = set(words(title)).intersection(set(words(subject)))
-            if len(overlap) < 2:
-                continue
-        if not title or not (valid_public_url(image) and valid_public_url(page)):
-            continue
-        key = image.lower()
-        if key in seen:
-            continue
-        seen.add(key)
-        selected.append({
-            "subject": subject,
-            "kind": kind,
-            "search_query": query,
-            "title": title[:400],
-            "image_url": image,
-            "source_page": page,
-            "source_search_engine": str(entry.get("source") or "unknown"),
-            "width": entry.get("width"),
-            "height": entry.get("height"),
-            "license": "UNVERIFIED",
-            "identity": "CANDIDATE_NEEDS_SOURCE_VERIFICATION",
-            "approved_for_publication": False,
-        })
-        if len(selected) >= limit:
-            break
+    with DDGS(timeout=15) as search:
+        for query in queries:
+            # Bing/DuckDuckGo metadata can be noisy: an exact subject in the
+            # page title is a minimum prerequisite, never a final identity check.
+            results = search.images(
+                query=query[:220], max_results=35, safesearch="moderate",
+                backend="auto", type_image="photo",
+            )
+            for entry in results:
+                title = str(entry.get("title") or "").strip()
+                image = str(entry.get("image") or "")
+                page = str(entry.get("url") or "")
+                if kind in {"person", "organization", "place"} and not exact_subject_match(title, subject):
+                    continue
+                if kind == "event":
+                    if len(set(words(title)).intersection(set(words(subject)))) < 2:
+                        continue
+                if not title or not (valid_public_url(image) and valid_public_url(page)):
+                    continue
+                key = image.lower()
+                if key in seen:
+                    continue
+                seen.add(key)
+                selected.append({
+                    "subject": subject,
+                    "kind": kind,
+                    "search_query": query,
+                    "title": title[:400],
+                    "image_url": image,
+                    "source_page": page,
+                    "source_search_engine": str(entry.get("source") or "unknown"),
+                    "width": entry.get("width"),
+                    "height": entry.get("height"),
+                    "license": "UNVERIFIED",
+                    "identity": "CANDIDATE_NEEDS_SOURCE_VERIFICATION",
+                    "approved_for_publication": False,
+                })
+                if len(selected) >= limit:
+                    return selected
+            if selected:
+                break
     return selected
 
 
@@ -149,6 +226,7 @@ def main():
     editorial = json.loads(Path(args.editorial).read_text(encoding="utf-8"))
     source = editorial.get("source") or {}
     subjects = editorial_subjects(editorial)
+    lead_image = article_lead_image(str(source.get("url") or ""))
     searched = []
     for item in subjects:
         subject, kind, context = item["name"], item["kind"], item["context"]
@@ -166,6 +244,7 @@ def main():
         "source_title": source.get("title"),
         "source_url": source.get("url"),
         "source_publisher": source.get("publisher"),
+        "original_article_lead_image": lead_image,
         "searched_at_utc": datetime.now(timezone.utc).isoformat(),
         "search_service": "DDGS image search (Bing/DuckDuckGo)",
         "subject_detection": "Gemini from current article + narration; strict source/spoken grounding",
@@ -181,6 +260,7 @@ def main():
         "Fuente: " + str(source.get("url") or ""),
         "Protagonistas detectados automáticamente: " + str(len(subjects)),
         "ATENCIÓN: estas imágenes aún NO están verificadas ni autorizadas para publicación.",
+        "Imagen principal declarada por artículo: " + (lead_image["image_url"] if lead_image else "No disponible"),
         "",
     ]
     for item in searched:
