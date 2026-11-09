@@ -2,6 +2,12 @@ name: MN Short - Autonomous bilingual video generation (review-only)
 
 on:
   workflow_dispatch:
+    inputs:
+      upload_unlisted:
+        description: 'Upload one Spanish video to YouTube as unlisted (uses Upload-Post quota)'
+        required: true
+        default: false
+        type: boolean
   schedule:
     - cron: '17 8 * * *'
 
@@ -20,6 +26,8 @@ jobs:
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
       PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
       GEMINI_MODEL: gemini-3.5-flash-lite
+      UPLOAD_POST_API_KEY: ${{ secrets.UPLOAD_POST_API_KEY }}
+      UPLOAD_POST_PROFILE: Medianews
       PYTHONUNBUFFERED: '1'
     steps:
       - uses: actions/checkout@v4
@@ -55,6 +63,10 @@ jobs:
       - name: Give exports human-readable names
         run: python scripts/mn_short_cloud.py collect
 
+      - name: Optional unlisted YouTube test through existing Upload-Post authorization
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.upload_unlisted == true }}
+        run: uv run --no-sync python scripts/mn_short_upload_test.py
+
       - name: Save finished MP4 files for editorial review
         if: success()
         uses: actions/upload-artifact@v4
@@ -65,7 +77,9 @@ jobs:
           retention-days: 3
           compression-level: 0
 
-# SAFETY: the workflow does NOT auto-publish videos. This prevents publishing
+# SAFETY: scheduled runs never upload to YouTube; only an explicit manual
+# workflow_dispatch with upload_unlisted=true sends ONE ES video as unlisted.
+# The workflow does NOT publish publicly. This prevents publishing
 # unverified news or unreviewed images until editorial checks and YouTube
 # OAuth/upload permissions have been tested. Scheduled runs start only after
 # explicit merge to the repository's default branch and secret configuration.
