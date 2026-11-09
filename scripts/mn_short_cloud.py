@@ -98,7 +98,7 @@ def generate_scripts(source: dict):
     key = os.environ.get("GEMINI_API_KEY", "")
     if not key:
         raise SystemExit("Missing GitHub secret GEMINI_API_KEY; cloud generation remains disabled.")
-    model = os.environ.get("GEMINI_MODEL", "gemini-3.5-flash-lite")
+    model = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash-lite")
     if not re.fullmatch(r"gemini-[a-zA-Z0-9._-]+", model):
         raise SystemExit("Unsupported Gemini model name")
     prompt = (
@@ -119,11 +119,29 @@ def generate_scripts(source: dict):
         "Source details:\n" + json.dumps(source, ensure_ascii=False)
     )
     body = {"contents": [{"parts": [{"text": prompt}]}], "generationConfig": {"responseMimeType": "application/json"}}
-    response = json.loads(request_bytes(
-        f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
-        json.dumps(body).encode("utf-8"),
-        {"Content-Type": "application/json", "x-goog-api-key": key}
-    ))
+    try:
+        response_bytes = request_bytes(
+            f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
+            json.dumps(body).encode("utf-8"),
+            {"Content-Type": "application/json", "x-goog-api-key": key},
+        )
+    except urllib.error.HTTPError as exc:
+        # Report Google's *reason* without printing the API key or the prompt.
+        try:
+            payload = json.loads(exc.read(8192).decode("utf-8", errors="replace"))
+            error = payload.get("error") or {}
+            status = str(error.get("status", "UNKNOWN"))
+            message = str(error.get("message", "No diagnostic message provided"))
+        except (ValueError, TypeError, AttributeError):
+            status, message = "UNKNOWN", "No parseable error details"
+        message = message.replace(key, "[REDACTED]").replace("\n", " ")[:500]
+        raise SystemExit(
+            f"Gemini API refused request: HTTP {exc.code}, status={status}, "
+            f"model={model}, reason={message}. "
+            "Check model availability and project free-tier eligibility in Google AI Studio; "
+            "do not enable billing automatically."
+        ) from None
+    response = json.loads(response_bytes)
     candidates = response.get("candidates") or []
     if not candidates:
         raise SystemExit("Gemini returned no candidates. Review quota and model availability.")
