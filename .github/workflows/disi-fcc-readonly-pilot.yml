@@ -74,12 +74,12 @@ jobs:
           printf '# DISI FCC read-only review\n\n' > fcc-artifacts/report.md
           printf 'GitHub run: %s\n\n' "$GITHUB_RUN_ID" >> fcc-artifacts/report.md
           PROMPT="$(cat .github/fcc/visual-research-review.md)"
-          timeout 420s fcc-claude \
+          timeout 600s fcc-claude \
             --print \
             --permission-mode plan \
             --tools 'Read,Grep,Glob' \
             --allowedTools 'Read,Grep,Glob' \
-            --max-turns 8 \
+            --max-turns 24 \
             "$PROMPT" >> fcc-artifacts/report.md
           test "$(wc -c < fcc-artifacts/report.md)" -gt 150
 
