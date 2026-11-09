@@ -37,12 +37,12 @@ MAX_STORY_AGE_HOURS = 36
 HISTORY_DAYS = 30
 
 SCHEDULE_CRONS = {
-    "0 8 * * *": "08:00",
-    "0 10 * * *": "10:00",
-    "0 12 * * *": "12:00",
-    "0 16 * * *": "16:00",
-    "0 18 * * *": "18:00",
-    "0 20 * * *": "20:00",
+    "30 7 * * *": "08:00",
+    "30 9 * * *": "10:00",
+    "30 11 * * *": "12:00",
+    "30 15 * * *": "16:00",
+    "30 17 * * *": "18:00",
+    "30 19 * * *": "20:00",
 }
 
 
@@ -230,6 +230,7 @@ def prepare(slot: str, topic: str) -> None:
         "generated": scripts,
         "grid": {
             "slot": slot, "topic": topic, "timezone": "Europe/Madrid",
+            "release_local_date": datetime.now(ZoneInfo("Europe/Madrid")).date().isoformat(),
             "prepared_at_utc": datetime.now(timezone.utc).isoformat(),
             "language": "es",
             "count": 1,
