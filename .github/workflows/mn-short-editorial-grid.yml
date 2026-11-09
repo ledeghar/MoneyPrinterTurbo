@@ -1,6 +1,11 @@
 name: MN Short - Six editorial Shorts per day (ES)
 
 on:
+  push:
+    branches:
+      - mnews/grid-pilot-20261109
+    paths:
+      - '.github/workflows/mn-short-editorial-grid.yml'
   workflow_dispatch:
     inputs:
       slot:
@@ -39,7 +44,7 @@ concurrency:
 jobs:
   produce-one-short:
     # Scheduled runs are inactive until review and explicit repository opt-in.
-    if: ${{ github.event_name == 'workflow_dispatch' || vars.MNSHORT_SCHEDULE_ENABLED == 'true' }}
+    if: ${{ github.event_name == 'push' || github.event_name == 'workflow_dispatch' || vars.MNSHORT_SCHEDULE_ENABLED == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 65
     env:
@@ -49,7 +54,7 @@ jobs:
       PYTHONUNBUFFERED: '1'
       MNSHORT_PUBLICATION_ENABLED: ${{ vars.MNSHORT_PUBLICATION_ENABLED }}
       CRON_EXPR: ${{ github.event.schedule }}
-      INPUT_SLOT: ${{ inputs.slot }}
+      INPUT_SLOT: ${{ inputs.slot || '10:00' }}
     steps:
       - name: Fetch newsroom code
         uses: actions/checkout@v4
