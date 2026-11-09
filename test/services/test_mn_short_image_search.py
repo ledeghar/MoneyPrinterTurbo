@@ -1,4 +1,4 @@
-from scripts.mn_short_image_search import editorial_subjects, exact_subject_match, valid_public_url
+from scripts.mn_short_image_search import ArticleImageParser, editorial_subjects, exact_subject_match, valid_public_url
 
 
 def test_person_name_must_be_complete_and_contiguous():
@@ -63,3 +63,31 @@ def test_when_no_named_subject_is_grounded_search_headline_without_person_claim(
     assert len(subjects) == 1
     assert subjects[0]["kind"] == "event"
     assert subjects[0]["name"] == "A strange spacecraft arrives"
+
+
+def test_generic_location_not_used_for_company_story():
+    editorial = {
+        "source": {
+            "title": "Fervo now has $12B in orders for its geothermal power tech",
+            "description": "Fervo is building an advanced geothermal resource in Utah."
+        },
+        "generated": {
+            "script_es": "Fervo desarrolla energía geotérmica en Utah.",
+            "script_en": "Fervo is developing geothermal power in Utah.",
+            "visual_subjects": [
+                {"name": "Fervo", "kind": "organization", "context": "geothermal"},
+                {"name": "Utah", "kind": "place", "context": "energy"}
+            ]
+        }
+    }
+    assert [s["name"] for s in editorial_subjects(editorial)] == ["Fervo"]
+
+
+def test_original_article_meta_image_discovery():
+    parser = ArticleImageParser()
+    parser.feed('<head><meta property="og:image" content="https://media.example.org/a.jpg">'
+                '<meta name="twitter:image" content="https://media.example.org/b.jpg"></head>')
+    assert parser.images == [
+        ("og:image", "https://media.example.org/a.jpg"),
+        ("twitter:image", "https://media.example.org/b.jpg")
+    ]
