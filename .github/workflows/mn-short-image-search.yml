@@ -2,6 +2,11 @@ name: MN Short - Dynamic editorial image search
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - mnews/image-search-check-20261109
+    paths:
+      - '.github/workflows/mn-short-image-search.yml'
 
 permissions:
   contents: read
