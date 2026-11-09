@@ -107,6 +107,10 @@ jobs:
         id: pack
         run: python scripts/mn_short_ecosystem.py package
 
+      - name: Confirm reporting, media, identity and image licensing
+        id: release_qa
+        run: python scripts/mn_short_release_gate.py
+
       - name: Save persistent history on separate branch
         run: |
           git fetch --no-tags origin refs/heads/mnshort-history:refs/remotes/origin/mnshort-history
@@ -120,7 +124,7 @@ jobs:
           git -C "$RUNNER_TEMP/mnshort-history" push origin HEAD:refs/heads/mnshort-history
 
       - name: OPTIONAL direct public YouTube upload
-        if: ${{ vars.MNSHORT_PUBLICATION_ENABLED == 'true' && github.event_name == 'schedule' }}
+        if: ${{ vars.MNSHORT_PUBLICATION_ENABLED == 'true' && github.event_name == 'schedule' && steps.release_qa.outputs.approved == 'true' }}
         env:
           YOUTUBE_CLIENT_ID: ${{ secrets.YOUTUBE_CLIENT_ID }}
           YOUTUBE_CLIENT_SECRET: ${{ secrets.YOUTUBE_CLIENT_SECRET }}
@@ -145,6 +149,8 @@ jobs:
 
 # GitHub Actions repository Variables:
 # MNSHORT_SCHEDULE_ENABLED=true -> enable six-slot cloud generation.
-# MNSHORT_PUBLICATION_ENABLED=true -> public YouTube uploads, only after
-# OAuth keys and automated editorial/visual checks have been validated.
+# MNSHORT_PUBLICATION_ENABLED=true -> consider scheduling public uploads,
+# but ONLY if release_qa verifies original factual reporting, licensed synchronized
+# scenes, video format, subject identity and a valid MP4. Current Pexels-only
+# renderer has no such evidence; uploads remain blocked until the integrations exist.
 # No public publishing occurs by default.
