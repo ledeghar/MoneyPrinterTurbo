@@ -1,0 +1,31 @@
+name: MN Short Editorial Grid - Quick Tests
+
+on:
+  pull_request:
+    paths:
+      - 'scripts/mn_short_ecosystem.py'
+      - 'scripts/mn_short_publish_scheduled.py'
+      - 'config/mn_short_grid.json'
+      - 'test/services/test_mn_short_ecosystem.py'
+      - '.github/workflows/mn-short-editorial-grid.yml'
+      - '.github/workflows/mn-short-grid-smoke.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  quick-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install only pytest
+        run: python -m pip install --disable-pip-version-check pytest
+      - name: Compile orchestration and uploader
+        run: python -m py_compile scripts/mn_short_ecosystem.py scripts/mn_short_publish_scheduled.py
+      - name: Verify six slots, feeds and duplicate protection without paid API calls
+        run: python -m pytest -q test/services/test_mn_short_ecosystem.py
