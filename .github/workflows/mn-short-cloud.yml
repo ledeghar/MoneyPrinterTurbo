@@ -1,4 +1,4 @@
-name: MN Short - Autonomous bilingual video generation (review-only)
+name: MN Short - Cloud bilingual video test (manual only)
 
 on:
   workflow_dispatch:
@@ -8,8 +8,6 @@ on:
         required: true
         default: false
         type: boolean
-  schedule:
-    - cron: '17 8 * * *'
 
 permissions:
   contents: read
@@ -77,9 +75,9 @@ jobs:
           retention-days: 3
           compression-level: 0
 
-# SAFETY: scheduled runs never upload to YouTube; only an explicit manual
+# SAFETY: no schedule is enabled during pilot testing. Only an explicit manual
 # workflow_dispatch with upload_unlisted=true sends ONE ES video as unlisted.
 # The workflow does NOT publish publicly. This prevents publishing
 # unverified news or unreviewed images until editorial checks and YouTube
-# OAuth/upload permissions have been tested. Scheduled runs start only after
-# explicit merge to the repository's default branch and secret configuration.
+# OAuth/upload permissions have been tested. A daily schedule will be added
+# only after the full workflow has been successfully tested and approved.
