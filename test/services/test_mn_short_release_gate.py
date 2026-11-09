@@ -48,6 +48,7 @@ def test_verified_source_and_exact_final_movie_can_release(tmp_path, monkeypatch
     movie, editorial = _fixture(tmp_path, monkeypatch)
     verification = {
         "claims_verified": True,
+        "original_contribution_verified": True,
         "unresolved_claims": [],
         "source_article_url": editorial["source"]["url"],
         "independent_sources": [
@@ -84,6 +85,7 @@ def test_cannot_replace_person_with_generic_place(tmp_path, monkeypatch):
     movie, editorial = _fixture(tmp_path, monkeypatch)
     (tmp_path / "VERIFICACION_FUENTES.json").write_text(json.dumps({
         "claims_verified": True,
+        "original_contribution_verified": True,
         "unresolved_claims": [],
         "source_article_url": editorial["source"]["url"],
         "independent_sources": ["https://another.example.org/report"],
