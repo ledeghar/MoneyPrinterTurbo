@@ -1,18 +1,7 @@
-name: MN Short - Exact-person image search pilot
+name: MN Short - Dynamic editorial image search
 
 on:
   workflow_dispatch:
-    inputs:
-      person:
-        description: 'Exact subject name, e.g. Jensen Huang'
-        required: true
-        type: string
-        default: 'Jensen Huang'
-      context:
-        description: 'Company or event for disambiguation'
-        required: false
-        type: string
-        default: 'Nvidia'
 
 permissions:
   contents: read
@@ -20,29 +9,32 @@ permissions:
 jobs:
   discover-image-candidates:
     runs-on: ubuntu-latest
-    timeout-minutes: 12
+    timeout-minutes: 15
     env:
-      SUBJECT: ${{ inputs.person }}
-      CONTEXT: ${{ inputs.context }}
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      GEMINI_MODEL: gemini-3.5-flash-lite
+      PYTHONUNBUFFERED: '1'
     steps:
-      - name: Check out MN Short code
+      - name: Check out MN Short
         uses: actions/checkout@v4
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - name: Install free DDGS search library
+      - name: Install DDGS (web image search; no extra credentials)
         run: python -m pip install --disable-pip-version-check "ddgs>=9,<12"
-      - name: Search photo candidates by exact subject name
-        run: python scripts/mn_short_image_search.py --subject "$SUBJECT" --context "$CONTEXT"
-      - name: Download image research report for review
+      - name: Select a fresh news item and identify named subjects
+        run: python scripts/mn_short_cloud.py prepare
+      - name: Search by the subjects of this specific news item
+        run: python scripts/mn_short_image_search.py --editorial mn_short_editorial.json
+      - name: Save editorial image search report
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: MNShort-Image-Research-${{ github.run_number }}
+          name: MNShort-VisualResearch-${{ github.run_number }}
           path: image-search-results/
           if-no-files-found: warn
           retention-days: 3
 
-# This pilot searches ONLY. It does not copy images into videos or publish them.
-# Search results are not proof of identity, licensing, or right to reuse.
+# No fixed protagonist, person, or company. Fresh news is selected at run time.
+# Research only: the candidates are not yet cleared to be included in videos.
