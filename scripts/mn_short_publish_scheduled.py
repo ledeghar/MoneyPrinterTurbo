@@ -13,11 +13,10 @@ from pathlib import Path
 
 import requests
 
-from mn_short_youtube_direct import (
-    UPLOAD_START_URL,
-    get_access_token,
-    validate_upload_url,
-)
+try:
+    from .mn_short_youtube_direct import UPLOAD_START_URL, get_access_token, validate_upload_url
+except ImportError:  # Direct invocation from GitHub Actions
+    from mn_short_youtube_direct import UPLOAD_START_URL, get_access_token, validate_upload_url
 
 CATEGORY_IDS = {
     "news": "25",
