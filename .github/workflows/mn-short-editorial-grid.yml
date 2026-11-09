@@ -137,6 +137,16 @@ jobs:
           PY
           uv run --no-sync python scripts/mn_short_publish_scheduled.py
 
+      - name: OPTIONAL scheduled Facebook and Instagram Reels (TikTok opt-in)
+        if: ${{ github.event_name == 'schedule' && vars.MNSHORT_CROSSPOST_ENABLED == 'true' && steps.release_qa.outputs.approved == 'true' }}
+        env:
+          MNSHORT_CROSSPOST_ENABLED: ${{ vars.MNSHORT_CROSSPOST_ENABLED }}
+          MNSHORT_CROSSPOST_PLATFORMS: ${{ vars.MNSHORT_CROSSPOST_PLATFORMS || 'facebook,instagram' }}
+          MNSHORT_TIKTOK_ENABLED: ${{ vars.MNSHORT_TIKTOK_ENABLED }}
+          UPLOAD_POST_PROFILE: ${{ vars.UPLOAD_POST_PROFILE }}
+          UPLOAD_POST_API_KEY: ${{ secrets.UPLOAD_POST_API_KEY }}
+        run: uv run --no-sync python scripts/mn_short_crosspost.py
+
       - name: Archive one MP4 and its editorial report
         if: always()
         uses: actions/upload-artifact@v4
@@ -153,4 +163,8 @@ jobs:
 # but ONLY if release_qa verifies original factual reporting, licensed synchronized
 # scenes, video format, subject identity and a valid MP4. Current Pexels-only
 # renderer has no such evidence; uploads remain blocked until the integrations exist.
+# MNSHORT_CROSSPOST_ENABLED=true plus UPLOAD_POST_API_KEY and UPLOAD_POST_PROFILE
+# enable cross-post scheduling ONLY after the exact same source/visual QA gate.
+# Facebook + Instagram default; TikTok only when added to
+# MNSHORT_CROSSPOST_PLATFORMS AND MNSHORT_TIKTOK_ENABLED=true.
 # No public publishing occurs by default.

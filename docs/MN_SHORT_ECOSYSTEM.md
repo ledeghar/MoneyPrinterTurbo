@@ -164,3 +164,69 @@ duración, composición audiovisual apropiada, producción y costes de
 renderizado, estructura editorial, derechos, frecuencia de publicación
 y vías de monetización. No cambiar el flujo 9:16 actual ni reutilizar
 automáticamente sus guiones cortos para generar vídeos largos.
+
+
+## Red de distribución priorizada por ingresos (YouTube, Facebook, Instagram, TikTok)
+
+La producción en GitHub sigue creando UN solo MP4 9:16 por franja.
+Distribuirlo en varias redes no crea más renders ni publica 6 veces por red.
+
+Orden práctico en 2026:
+1. **YouTube Shorts:** integración oficial de publicación programada y panel
+   propio de visualizaciones/ingresos; exige admisión YPP, aceptación del
+   módulo Shorts y condiciones actuales de acceso al reparto de anuncios.
+2. **Facebook Reels:** potencial de monetización de contenido y Reels, sujeto
+   a elegibilidad/invitación en el panel profesional de Meta.
+3. **Instagram Reels:** descubrimiento, audiencia, colaboración y venta;
+   no contabilizar ingresos por visualizaciones como si fueran seguros.
+4. **TikTok:** distribución secundaria, NO asumir Creator Rewards: exige
+   cuenta elegible en región admitida y vídeos originales de más de un minuto.
+   Los Shorts actuales (30–40s) no cumplen esa duración. Upload-Post para
+   TikTok requiere plan de pago.
+
+Se ha incorporado scripts/mn_short_crosspost.py al mismo workflow de GitHub.
+Usa la API de Upload-Post para programar Reels y, si se autoriza, TikToks.
+**No replica YouTube**, evitando duplicar la publicación oficial.
+Cada publicación externa utiliza clave de idempotencia (evita programar dos
+veces por un reintento) y guarda PROGRAMACION_REDES.json en el ZIP.
+Un job_id solo confirma la programación; no prueba publicación completada
+ni ingresos.
+
+### Conexión de redes: solo cuando estén validadas
+
+En la cuenta de Upload-Post:
+- Vincular la **Página de Facebook** correcta y la cuenta Instagram
+  profesional adecuada; verificar que Meta autoriza publicar Reels.
+- Opcionalmente vincular TikTok. Evaluar coste y elegibilidad real.
+- Crear API key; guardarla como GitHub Actions SECRET llamado
+  UPLOAD_POST_API_KEY. No introducir credenciales en este documento.
+- Crear GitHub Actions VARIABLE UPLOAD_POST_PROFILE con el perfil autorizado.
+- Crear GitHub Actions VARIABLE MNSHORT_CROSSPOST_PLATFORMS con
+  facebook,instagram (o solo facebook para limitar costes).
+- Opcional: incluir tiktok y variable MNSHORT_TIKTOK_ENABLED=true.
+  No se activa solo por tener la cuenta conectada.
+- Tras comprobar derechos, exactitud e integración visual de cada vídeo,
+  establecer MNSHORT_CROSSPOST_ENABLED=true.
+
+MNSHORT_CROSSPOST_ENABLED está ausente/false por defecto. Además, el
+workflow exige el mismo control de publicación APTO_PARA_PROGRAMAR, un
+evento programado (no una prueba manual), una sola pieza y un MP4
+criptográficamente idéntico al validado. Si no hay pruebas suficientes,
+**ninguna red recibe vídeos nuevos**.
+
+El servicio Upload-Post anuncia 10 subidas gratuitas al mes, pero TikTok
+requiere plan de pago. Seis Shorts diarios implicarían aprox. 180 piezas
+mensuales (y varios destinos por pieza); comparar tarifas y retorno real
+antes de contratar algo. Consultar precios actuales directamente en
+https://upload-post.com/pricing
+
+No tenemos conexión confirmada ni estados de monetización de las cuentas
+de Facebook, Instagram o TikTok. La prioridad final dependerá de sus
+paneles de monetización y de ingresos efectivos; nunca atribuir ingresos
+a visualizaciones simples si la plataforma no informa de ellos.
+
+Fuentes:
+- https://docs.upload-post.com/api/upload-video
+- https://docs.upload-post.com/guides/github-action/
+- https://about.fb.com/news/2026/03/creator-fast-track-grow-your-audience-earn-money-on-facebook/
+- https://support.tiktok.com/es/business-and-creator/creator-rewards-program/how-is-the-creator-rewards-program-different-from-the-tiktok-creator-fund
