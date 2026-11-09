@@ -17,8 +17,8 @@ def test_config_is_six_slots_one_video_per_slot():
 
 
 def test_schedule_cron_maps_to_madrid_local_hour():
-    assert m.resolved_slot(scheduled_cron="0 8 * * *") == "08:00"
-    assert m.resolved_slot(scheduled_cron="0 20 * * *") == "20:00"
+    assert m.resolved_slot(scheduled_cron="30 7 * * *") == "08:00"
+    assert m.resolved_slot(scheduled_cron="30 19 * * *") == "20:00"
     assert m.resolved_slot(raw_slot="18:00") == "18:00"
     with pytest.raises(ValueError):
         m.resolved_slot(scheduled_cron="0 6 * * *")

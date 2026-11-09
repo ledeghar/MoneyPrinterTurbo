@@ -7,9 +7,11 @@ an ambiguous YouTube API result: investigate Studio to avoid duplicates.
 """
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
 import json
 import os
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 import requests
 
@@ -40,6 +42,19 @@ def upload_one_public(path: Path, editorial: dict) -> str:
     title = str(editorial["generated"]["title_es"]).strip()
     if not 1 <= len(title) <= 100:
         raise RuntimeError("Invalid YouTube title")
+    # A public release must be planned ahead of the editorial target time.
+    # uploads arriving late are stopped, not silently published hours later.
+    grid = editorial["grid"]
+    release_date = grid.get("release_local_date")
+    slot = grid.get("slot")
+    if not release_date or slot not in {"08:00", "10:00", "12:00", "16:00", "18:00", "20:00"}:
+        raise RuntimeError("Scheduled release date/slot missing from manifest")
+    release_utc = datetime.fromisoformat(f"{release_date}T{slot}:00").replace(
+        tzinfo=ZoneInfo("Europe/Madrid")
+    ).astimezone(timezone.utc)
+    if release_utc <= datetime.now(timezone.utc) + timedelta(minutes=2):
+        raise RuntimeError("Too late for the intended public slot; no upload performed")
+    publish_at = release_utc.isoformat(timespec="seconds").replace("+00:00", "Z")
     description = (
         "MN Short — información de actualidad.\n\n"
         f"Fuente: {source['publisher']}.\n"
@@ -69,7 +84,8 @@ def upload_one_public(path: Path, editorial: dict) -> str:
                     "defaultLanguage": "es",
                 },
                 "status": {
-                    "privacyStatus": "public",
+                    "privacyStatus": "private",
+                    "publishAt": publish_at,
                     "selfDeclaredMadeForKids": False,
                     "containsSyntheticMedia": True,
                 },
@@ -106,14 +122,16 @@ def upload_one_public(path: Path, editorial: dict) -> str:
             json.dumps({
                 "video_id": video_id,
                 "url": f"https://www.youtube.com/watch?v={video_id}",
-                "requested_privacy": "public",
+                "requested_privacy": "private_until_scheduled_release",
+                "scheduled_publish_at_utc": publish_at,
                 "reported_privacy": privacy,
                 "slot": editorial["grid"]["slot"],
                 "title": title,
             }, ensure_ascii=False, indent=2),
             encoding="utf-8",
         )
-        print(f"YouTube upload confirmed: video_id={video_id}, privacy={privacy}")
+        print(f"YouTube scheduled upload confirmed: video_id={video_id}, "
+              f"release={publish_at}, current_privacy={privacy}")
         return video_id
 
 
