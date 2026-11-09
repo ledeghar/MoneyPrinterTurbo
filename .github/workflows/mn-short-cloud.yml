@@ -81,6 +81,5 @@ jobs:
 # SAFETY: NO SCHEDULE during pilot testing. Only an explicit manual
 # workflow_dispatch with upload_youtube_unlisted=true uploads ONE ES Short
 # directly to YouTube as UNLISTED. This never publishes publicly.
-# unverified news or unreviewed images until editorial checks and YouTube
-# OAuth/upload permissions have been tested. A daily schedule will be added
-# only after the full workflow has been successfully tested and approved.
+# A daily schedule will be added only after the full workflow has been
+# tested, source deduplication exists, and OAuth is out of Testing mode.
