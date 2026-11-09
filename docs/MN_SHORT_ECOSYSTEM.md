@@ -155,3 +155,12 @@ repetitivo producido en masa; es imprescindible aportar contexto y valor
 periodístico originales, variedad y tratamiento visual correcto.
 Fuente: https://support.google.com/youtube/answer/1311392?hl=es-SP
 Umbrales: https://support.google.com/youtube/answer/94522?hl=es-ES
+
+## Pendiente de una segunda fase: vídeos horizontales 16:9
+
+Cuando la parrilla vertical de Shorts esté operativa, estudiar un flujo
+**separado** de vídeos 16:9 para YouTube: reportajes y análisis de mayor
+duración, composición audiovisual apropiada, producción y costes de
+renderizado, estructura editorial, derechos, frecuencia de publicación
+y vías de monetización. No cambiar el flujo 9:16 actual ni reutilizar
+automáticamente sus guiones cortos para generar vídeos largos.
