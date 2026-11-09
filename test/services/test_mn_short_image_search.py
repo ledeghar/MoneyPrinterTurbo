@@ -1,4 +1,4 @@
-from scripts.mn_short_image_search import editorial_subjects, exact_subject_match, valid_public_url, words
+from scripts.mn_short_image_search import editorial_subjects, exact_subject_match, valid_public_url
 
 
 def test_person_name_must_be_complete_and_contiguous():
