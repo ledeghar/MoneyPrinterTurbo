@@ -62,9 +62,18 @@ def main():
             print("Request ID (inspect in Upload-Post before retry):", result["request_id"])
         raise SystemExit(1)
     print("Upload-Post confirmed unlisted YouTube upload:", result.get("request_id", "success"))
-    for p, entry in (result.get("results") or {}).items():
-        if p == "youtube" and isinstance(entry, dict):
-            print("YouTube URL:", entry.get("url", "(available in Upload-Post dashboard)"))
+    # Upload-Post may return platform results as either a mapping or list.
+    # Do not fail after a successful remote upload: retrying can duplicate it.
+    platform_results = result.get("results")
+    if isinstance(platform_results, dict):
+        entry = platform_results.get("youtube", {})
+        if isinstance(entry, dict) and entry.get("url"):
+            print("YouTube URL:", entry["url"])
+    elif isinstance(platform_results, list):
+        for entry in platform_results:
+            if isinstance(entry, dict) and entry.get("platform") == "youtube" and entry.get("url"):
+                print("YouTube URL:", entry["url"])
+                break
 
 
 if __name__ == "__main__":
