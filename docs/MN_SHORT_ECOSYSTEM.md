@@ -26,8 +26,14 @@ no como dependencias actualmente operativas.
 20:00 — Tecnología o gaming, alternando cada día
 
 Workflow: .github/workflows/mn-short-editorial-grid.yml.
-Los cron usan Europe/Madrid, con cambio automático de hora estacional.
-GitHub no garantiza comenzar las ejecuciones exactamente al minuto.
+Los cron ejecutan la preparación 30 minutos ANTES de cada hora de salida
+(07:30, 09:30, 11:30, 15:30, 17:30 y 19:30, Europe/Madrid).
+Una vez activado y probado el OAuth, los vídeos se subirán como privados
+con publishAt para que YouTube los haga públicos a las 08, 10, 12, 16,
+18 y 20 horas. Si la producción llega demasiado tarde, la subida se cancela;
+no se publica fuera de horario a escondidas.
+GitHub no garantiza comenzar las ejecuciones exactamente al minuto,
+y los retrasos pueden causar la omisión segura de una franja.
 
 ## Tres niveles de activación
 
