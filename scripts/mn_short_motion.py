@@ -243,35 +243,85 @@ async def synthesize(text, voice, output):
     await speech.save(str(output))
 
 
+VOICES = {
+    "es": "es-ES-AlvaroNeural",
+    "en": "en-GB-RyanNeural",
+    "fr": "fr-FR-HenriNeural",
+    "de": "de-DE-ConradNeural",
+    "it": "it-IT-DiegoNeural",
+    "pt": "pt-PT-DuarteNeural",
+    "ru": "ru-RU-DmitryNeural",
+    "zh": "zh-CN-YunxiNeural",
+    "ja": "ja-JP-KeitaNeural",
+    "ar": "ar-SA-HamedNeural",
+}
+
+
 async def build(editorial, mode):
     generated, source = editorial["generated"], editorial["source"]
+    if mode == "demo":
+        translations = json.loads((MOTION / "demo_translations.json").read_text(encoding="utf-8"))
+    else:
+        translations_path = ROOT / "mn_short_motion_translations.json"
+        if not translations_path.is_file():
+            raise RuntimeError("Missing aligned translations; run mn_short_motion_translate.py first.")
+        translations = json.loads(translations_path.read_text(encoding="utf-8"))
+
+    # One semantic and visual storyboard is shared among all languages. Every
+    # translation MUST have precisely the same number/order of segments.
+    original = translations.get("es") or []
+    if not isinstance(original, list) or not (3 <= len(original) <= 18):
+        raise RuntimeError("Canonical Spanish story has unexpected scene count")
+    if set(translations) != set(VOICES):
+        raise RuntimeError("Missing languages: " + repr(set(VOICES) - set(translations)))
+    for lang, segments in translations.items():
+        if not isinstance(segments, list) or len(segments) != len(original):
+            raise RuntimeError("Screen-to-screen translation mismatch: " + lang)
+        if any(not isinstance(s, str) or len(s.strip()) < 2 for s in segments):
+            raise RuntimeError("Empty/invalid spoken segment: " + lang)
+
     shutil.rmtree(PUBLIC / "audio", ignore_errors=True)
     shutil.rmtree(PUBLIC / "images", ignore_errors=True)
     PROPS.mkdir(parents=True, exist_ok=True)
     OUTPUT.mkdir(parents=True, exist_ok=True)
-    all_people = set()
-    original_nums = set(re.findall(r"(?<!\w)\d+(?:[.,]\d+)?%?", (str(source.get("title") or "") + " " + str(source.get("description") or ""))))
+    original_nums = set(re.findall(
+        r"(?<!\w)\d+(?:[.,]\d+)?%?",
+        str(source.get("title") or "") + " " + str(source.get("description") or "")
+    ))
+    visuals = [
+        cue(sentence, i, len(original), source,
+            generated.get("visual_subjects") or [], original_nums,
+            demo=(mode == "demo"))
+        for i, sentence in enumerate(original)
+    ]
+
     photo_cache = {}
-    credit_list = []
-    for lang, voice in (("es", "es-ES-AlvaroNeural"), ("en", "en-GB-RyanNeural")):
-        sentences = generated.get("demo_sentences_" + lang) if mode == "demo" else None
-        sentences = sentences or split_sentences(generated["script_" + lang])
-        if not (2 <= len(sentences) <= 18):
-            raise RuntimeError("Unexpected narration sentence count in " + lang)
-        scenes = []
+    credits = []
+    for item in visuals:
+        person = item.get("person")
+        if person and person not in photo_cache:
+            photo_cache[person] = save_commons_photo(
+                person, PUBLIC / "images" / ("person_" + str(len(photo_cache) + 1))
+            )
+            if photo_cache[person]:
+                credits.append({"person": person, **photo_cache[person]})
+        if person and photo_cache.get(person):
+            item["image"] = photo_cache[person]["local"]
+            item["credit"] = photo_cache[person]["credit"]
+
+    durations = {}
+    for lang, voice in VOICES.items():
+        sentences = translations[lang]
         cursor = 0
+        scenes = []
         for index, sentence in enumerate(sentences):
-            visuals = cue(sentence, index, len(sentences), source, generated.get("visual_subjects") or [], original_nums, demo=(mode=="demo"))
-            person = visuals.get("person")
-            if person:
-                all_people.add(person)
-                if person not in photo_cache:
-                    photo_cache[person] = save_commons_photo(person, PUBLIC / "images" / ("person_" + str(len(photo_cache) + 1)))
-                    if photo_cache[person]:
-                        credit_list.append({"person": person, **photo_cache[person]})
-                if photo_cache[person]:
-                    visuals["image"] = photo_cache[person]["local"]
-                    visuals["credit"] = photo_cache[person]["credit"]
+            picture = visuals[index].copy()
+            # Exact same type, photo, metric, and named subject as all other
+            # languages. Translate all non-entity text displayed in graphics.
+            if picture["kind"] == "headline":
+                picture["subject"] = sentence
+            if picture["kind"] == "metric":
+                picture["subject"] = sentence
             audio_rel = "audio/" + lang + "_" + str(index).zfill(2) + ".mp3"
             audio_file = PUBLIC / audio_rel
             audio_file.parent.mkdir(parents=True, exist_ok=True)
@@ -279,33 +329,49 @@ async def build(editorial, mode):
             frames = max(45, math.ceil(voice_duration(audio_file) * FPS) + 5)
             scenes.append({
                 "text": sentence, "audio": audio_rel, "startFrame": cursor,
-                "durationFrames": frames, **visuals,
+                "durationFrames": frames, **picture,
             })
             cursor += frames
-        if cursor > 60 * FPS:
-            raise RuntimeError("Narration exceeds 60 seconds: shorten the generated script")
+        if cursor > 95 * FPS:
+            raise RuntimeError(
+                lang + " audio exceeds 95 seconds: need shorter editorial narration"
+            )
         props = {
-            "language": lang, "publisher": source.get("publisher") or "Media News",
-            "storyTitle": generated["title_" + lang], "sourceUrl": source.get("url") or "",
-            "totalFrames": cursor, "scenes": scenes,
+            "language": lang,
+            "publisher": source.get("publisher") or "Media News",
+            "storyTitle": generated.get("title_" + lang) or generated.get("title_es") or "",
+            "sourceUrl": source.get("url") or "",
+            "totalFrames": cursor,
+            "scenes": scenes,
         }
-        (PROPS / (lang + ".json")).write_text(json.dumps(props, ensure_ascii=False, indent=2), encoding="utf-8")
-        print(lang, len(scenes), "scenes", round(cursor / FPS, 1), "seconds", len(all_people), "person subjects")
+        (PROPS / (lang + ".json")).write_text(
+            json.dumps(props, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+        durations[lang] = round(cursor / FPS, 2)
+        print(lang, len(scenes), "scenes", durations[lang], "seconds")
+
     metadata = {
         "mode": mode, "source": source, "generated": generated,
-        "photo_candidates_selected": credit_list,
-        "photo_selection_notice": "Commons file title and license checks are automated. Visual identity and publication rights still need final editorial review; no unrelated portrait substitutions.",
-        "video_paths": ["MNShort_MOTION_ES.mp4", "MNShort_MOTION_EN.mp4"],
-        "autopublish": False, "created_utc": datetime.now(timezone.utc).isoformat(),
+        "aligned_translations": translations,
+        "durations_seconds": durations,
+        "photo_candidates_selected": credits,
+        "photo_selection_notice": "Commons license and title checks do not prove subject identity; inspect all chosen photos and rights before publication.",
+        "languages": list(VOICES),
+        "autopublish": False,
+        "created_utc": datetime.now(timezone.utc).isoformat(),
     }
-    (OUTPUT / "editorial-y-creditos.json").write_text(json.dumps(metadata, ensure_ascii=False, indent=2), encoding="utf-8")
+    (OUTPUT / "editorial-y-creditos.json").write_text(
+        json.dumps(metadata, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
     (OUTPUT / "LEEME.txt").write_text(
-        "\ufeffMN SHORT — MOTOR REMOTION\n"
+        "\ufeffMN SHORT — MOTOR REMOTION EN 10 IDIOMAS\n"
         + "Prueba: " + mode.upper() + "\n"
         + "Fuente: " + str(source.get("url") or "") + "\n"
+        + "Diez vídeos verticales generados a partir del MISMO guion y storyboard.\n"
+        + "Archivos por idioma: " + ", ".join("MNShort_MOTION_" + x.upper() + ".mp4" for x in VOICES) + "\n"
         + "Solo para revisión: NO se publica automáticamente.\n"
-        + "Las imágenes de Commons necesitan revisar su identidad, autoría y atribución.\n"
-        + "Los diagramas geográficos esquemáticos NO son mapas reales.\n",
+        + "Las fotografías de Commons requieren verificar identidad, derechos y atribución.\n"
+        + "Los diagramas de contexto NO son mapas geográficos.\n",
         encoding="utf-8",
     )
 
