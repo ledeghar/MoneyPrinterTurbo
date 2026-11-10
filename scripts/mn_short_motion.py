@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Create ES/EN news motion-graphics props and synchronized TTS clips.
+"""Create ten-language news motion-graphics props and synchronized TTS clips.
 
 Modes:
   demo — an explicitly labelled demonstration, without Gemini credentials;
@@ -237,10 +237,38 @@ def voice_duration(path):
 
 async def synthesize(text, voice, output):
     import edge_tts
-    # Avoid asking the synthesizer to speak abbreviations letter-by-letter.
-    for_original = re.sub(r"\bMN\s+Short\b", "eme ene short" if voice.startswith("es-") else "em en short", text, flags=re.I)
-    speech = edge_tts.Communicate(for_original, voice=voice, rate="-4%", volume="+12%")
-    await speech.save(str(output))
+    # Newsroom brand is sounded out in English and Spanish.
+    replacements = {
+        "es": "eme ene short",
+        "en": "em en short",
+        "fr": "ème enne short",
+        "de": "em en short",
+        "it": "emme enne short",
+        "pt": "eme ene short",
+        "ru": "эм эн шорт",
+        "zh": "艾姆恩肖特",
+        "ja": "エムエヌ ショート",
+        "ar": "إم إن شورت",
+    }
+    locale = voice.split("-", 1)[0]
+    text = re.sub(
+        r"\bMN\s+Short\b", lambda _: replacements.get(locale, "MN Short"),
+        text, flags=re.I,
+    )
+    for attempt in range(3):
+        try:
+            speech = edge_tts.Communicate(text, voice=voice, rate="-4%", volume="+12%")
+            await speech.save(str(output))
+            if output.stat().st_size <= 500:
+                raise RuntimeError("TTS returned empty audio")
+            return
+        except Exception as exc:
+            output.unlink(missing_ok=True)
+            if attempt == 2:
+                raise RuntimeError(
+                    "Neural TTS failed for " + locale + " after retries: " + type(exc).__name__
+                ) from exc
+            await asyncio.sleep(2.0 + attempt * 3.0)
 
 
 VOICES = {
