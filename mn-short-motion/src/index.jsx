@@ -10,12 +10,12 @@ const Root = () => (<>
     fps={25}
     width={720}
     height={1280}
-    durationInFrames={1370}
+    durationInFrames={1367}
     calculateMetadata={({props}) => ({
-      durationInFrames: Math.max(1, Number(props.totalFrames) || 1370)
+      durationInFrames: Math.max(1, Number(props.totalFrames) || 1367)
     })}
     defaultProps={{
-      totalFrames:1370,bodyFrames:1175,scenes:[],captions:[],
+      totalFrames:1367,bodyFrames:1175,scenes:[],captions:[],
       audio:"PELAYO_WAV_ORIGINAL.wav"
     }}
   />
