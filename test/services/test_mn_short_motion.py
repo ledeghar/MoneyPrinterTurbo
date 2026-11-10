@@ -1,11 +1,22 @@
 """Offline invariants of the ten-language motion-graphics compositor."""
 import json
 import unittest
+from pathlib import Path
 
 from scripts.mn_short_motion import MOTION, VOICES, cue, named, split_sentences
 
 
 class MotionPilotTests(unittest.TestCase):
+    def test_video_branding_includes_disi_without_old_spacing(self):
+        source = (MOTION / "src" / "NewsVideo.jsx").read_text(encoding="utf-8")
+        index = (MOTION / "src" / "index.jsx").read_text(encoding="utf-8")
+        self.assertIn('const PRODUCT_NAME = "MNShort";', source)
+        self.assertIn('const EDITORIAL_SIGNATURE = "Media News by DISI";', source)
+        self.assertIn("{EDITORIAL_SIGNATURE}", source)
+        self.assertIn("{PRODUCT_NAME}", source)
+        self.assertNotIn(">MN SHORT<", source)
+        self.assertIn('storyTitle: "MNShort"', index)
+
     def test_exact_person_name_not_brand(self):
         self.assertTrue(named("The CEO Jensen Huang joined Nvidia", "Jensen Huang"))
         self.assertFalse(named("Nvidia launched a new chip", "Jensen Huang"))
