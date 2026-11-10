@@ -74,3 +74,48 @@ Python 3.11, FFprobe, Node 20, Noto font families:
 Spanish, English, French, German, Italian, Portuguese, Russian, Chinese,
 Japanese and Arabic have their own props JSON and MP3 files created by
 the shared preparation step. Production should use the cloud Actions flow.
+
+
+## Exact subtitle timing and mandatory authentic images (November 2026)
+
+The earlier pilot evenly distributed highlighted words through each sentence.
+This was not synchronized to the actual spoken voice. We now record Edge TTS
+**WordBoundary** events from the same audio stream and send each word's actual
+start/end timestamps to Remotion. Every language is measured individually.
+If the synthesizer cannot return boundaries, generation stops rather than
+claiming to have synchronized subtitles.
+
+When a real person is named in the visual storyboard, image selection checks:
+1. A name-matched Wikidata entity and curated P18 photo (if available);
+2. Wikimedia Commons expanded named-photo search;
+3. Exact file identity/source metadata, reuse license (PD/CC0/CC BY), creator
+   attribution and the original Commons file page.
+
+A missing or uncleared person's photograph now **fails the review render**.
+It never substitutes initials, anonymous executives, stock imagery or a logo.
+Wikidata/Commons evidence cannot fully replace visual/editorial identity review.
+
+## One MP4 with ten selectable audio and subtitle tracks
+
+The GitHub Actions **multilingual-master** job renders a subtitle-free common
+video timeline and packages:
+
+- MNShort_MASTER_10_AUDIO_10_SUBTITLES.mp4 — one 1080x1920
+  H.264 master with ten selectable AAC voice tracks and ten selectable mov_text
+  subtitle streams, with ISO language codes.
+- YT_DUB_es.m4a, YT_DUB_en.m4a, ... YT_DUB_ar.m4a — audio-only tracks
+  for the YouTube Studio multilang dubbing workflow.
+- SUBTITULOS_es.srt, ... SUBTITULOS_ar.srt — separate language-specific
+  caption files, for YouTube Studio or another editing tool.
+
+To preserve natural voice rate, the common scene boundaries are determined
+by the longest translated utterance in each scene, and shorter voices are
+padded with silence. The universal master does not burn Spanish voice captions
+into pixels: users select the matching embedded subtitles in a compatible
+media player. Ten separate fully localized social cuts remain available.
+
+**YouTube caveat:** Adding ten audio streams to the MP4 is not equivalent to
+installing ten dubbed audio tracks on YouTube. For an eligible creator,
+YouTube Studio > Languages > [video] > Add Language > Dub > Add is the
+supported workflow. YouTube may not import extra MP4 audio streams as
+user-selectable tracks. Eligibility depends on channel features.
