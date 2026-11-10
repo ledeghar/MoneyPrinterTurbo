@@ -30,6 +30,7 @@ jobs:
               assert duration>12 and p.stat().st_size>25000, p
           PY
       - name: Exportar doblajes y marcas temporales
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: DISI-V6-neural-9-languages
