@@ -129,6 +129,14 @@ def gather(now: datetime, credentials: tuple) -> dict:
                                   "id":",".join(dict.fromkeys(ids))},credentials)
             for v in detail["items"]:
                 snippet=v.get("snippet",{})
+                # View-sorted search is insufficient: the actual headline must
+                # overlap the specific weekly micro-niche; reject unrelated hits.
+                stop={"news","short","shorts","video","videos","trending","explained",
+                      "new","latest","today","updates","breaking","industry"}
+                query_words={x for x in re.findall(r"[a-z]{2,}",phrase.lower()) if x not in stop}
+                video_words=set(re.findall(r"[a-z]{2,}",snippet.get("title","").lower()))
+                if not query_words.intersection(video_words):
+                    continue
                 duration=iso_seconds(v.get("contentDetails",{}).get("duration",""))
                 item={
                     "id":v.get("id"),"title":snippet.get("title",""),
@@ -169,6 +177,8 @@ def main():
               "viral examples:",report["chosen"]["viral_videos"])
     except Exception as exc:
         report["reason"]=str(exc)
+        if "YouTube Data API" in str(exc):
+            report["status"]="research_unavailable_credentials_or_permissions"
         path.write_text(json.dumps(report,ensure_ascii=False,indent=2)+"\n",encoding="utf-8")
         raise SystemExit("No verified niche this Wednesday: "+str(exc))
     path.write_text(json.dumps(report,ensure_ascii=False,indent=2)+"\n",encoding="utf-8")
