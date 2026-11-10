@@ -1,0 +1,48 @@
+name: MNShort - Pruebas calendario semanal y tendencias
+on:
+  push:
+    branches: [main, mnshort-weekly-trend-wednesday-20261110]
+    paths:
+      - .github/workflows/mn-short-weekly-trends.yml
+      - .github/workflows/mn-short-editorial-grid.yml
+      - .github/workflows/mn-short-weekly-tests.yml
+      - scripts/mn_short_weekly_niche.py
+      - scripts/mn_short_ecosystem.py
+      - scripts/mn_short_youtube_channel_guard.py
+      - scripts/mn_short_youtube_captions.py
+      - test/services/test_mn_short_weekly_niche.py
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Verificar sintaxis del codigo y todas las pruebas
+        run: |
+          python -m compileall -q \
+            scripts/mn_short_weekly_niche.py \
+            scripts/mn_short_ecosystem.py \
+            scripts/mn_short_youtube_channel_guard.py \
+            scripts/mn_short_youtube_captions.py
+          python -m unittest discover -s test/services -p test_mn_short_weekly_niche.py -v
+      - name: Confirmar un solo calendario semanal y zona horaria
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          weekly=Path(".github/workflows/mn-short-weekly-trends.yml").read_text()
+          old=Path(".github/workflows/mn-short-editorial-grid.yml").read_text()
+          assert weekly.count("    - cron:") == 1
+          assert "cron: '15 8 * * 3'" in weekly
+          assert "timezone: 'Europe/Madrid'" in weekly
+          assert "  schedule:" not in old, "Legacy daily scheduler must stay disabled"
+          assert "scripts/mn_short_weekly_niche.py" in weekly
+          print("PASS: only one Wednesday research trigger, Spain local time")
+          PY
+      - name: Garantizar que no se publica durante el test
+        run: echo "Tests do not publish or alter social media accounts."
