@@ -5,7 +5,6 @@ import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
-from pathlib import Path
 
 from scripts.mn_short_motion import MOTION, VOICES, cue, named, split_sentences
 
