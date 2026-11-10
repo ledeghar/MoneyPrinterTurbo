@@ -91,63 +91,156 @@ def split_sentences(script):
     return [s.strip() for s in re.split(r"(?<=[.!?])\s+(?=[A-ZÁÉÍÓÚÑ0-9])", text) if s.strip()]
 
 
-def licensed_photo(name):
-    """Use Commons only, require full name in file title and CC0/PD/CC BY.
+def wiki_json(endpoint, params, timeout=20):
+    """Query Wikimedia APIs with a declared identity and conservative timeout."""
+    url = endpoint + "?" + urlencode(params)
+    request = Request(
+        url, headers={"User-Agent": USER_AGENT, "Accept": "application/json"}
+    )
+    with urlopen(request, timeout=timeout) as response:
+        return json.load(response)
 
-    CC BY-SA and NC/ND are intentionally excluded for this initial pilot.
-    The title+license gate is necessary, not a guarantee of photo identity.
+
+def wikidata_identity_photo(name):
+    """Look up Wikidata's curated P18 portrait of the EXACT named person.
+
+    P18 establishes a strongly identified source file. Commons must STILL
+    confirm the photo's reuse license, author and original source page.
     """
-    endpoint = "https://commons.wikimedia.org/w/api.php"
-    parameters = {
-        "action": "query", "format": "json", "generator": "search",
-        "gsrsearch": '"' + name + '"', "gsrnamespace": "6",
-        "gsrlimit": "18", "prop": "imageinfo",
-        "iiprop": "url|extmetadata|size", "iiurlwidth": "1280",
-    }
-    url = endpoint + "?" + urlencode(parameters)
     try:
-        request = Request(url, headers={"User-Agent": USER_AGENT, "Accept": "application/json"})
-        with urlopen(request, timeout=17) as response:
-            data = json.load(response)
-        pages = (data.get("query") or {}).get("pages") or {}
-    except (ValueError, OSError) as exc:
-        print("Commons search unavailable for", name, type(exc).__name__)
-        return None
-    options = []
-    for page in pages.values():
-        title = str(page.get("title") or "").removeprefix("File:")
-        if not named(title, name):
-            continue
-        details = (page.get("imageinfo") or [])
-        if not details:
-            continue
-        info = details[0]
-        meta = info.get("extmetadata") or {}
-        license_name = clean_html((meta.get("LicenseShortName") or {}).get("value") or "")
-        lic = license_name.upper().replace("-", " ")
-        # Avoid licenses with ShareAlike/NonCommercial/NoDerivatives obligations.
-        if not (
-            lic in {"CC0", "CC0 1.0", "PUBLIC DOMAIN", "PD", "PD-OLD"}
-            or re.fullmatch(r"CC BY (?:2\.0|2\.5|3\.0|4\.0)", lic)
-        ):
-            continue
-        description = clean_html((meta.get("ImageDescription") or {}).get("value") or "")
-        if description and not named(description, name) and not named(title, name):
-            continue
-        uri = str(info.get("thumburl") or "")
-        hostname = (urlparse(uri).hostname or "").lower()
-        if urlparse(uri).scheme != "https" or hostname != "upload.wikimedia.org":
-            continue
-        if not re.search(r"\.(jpe?g|png)(?:\?|$)", uri, flags=re.I):
-            continue
-        credit = clean_html((meta.get("Artist") or {}).get("value") or "") or "Autor no indicado"
-        options.append({
-            "url": uri, "title": title, "author": credit[:100],
-            "license": license_name, "page": info.get("descriptionurl") or "",
-            "credit": (credit[:65] + " / " + license_name + " / Wikimedia Commons")[:110],
-            "width": info.get("thumbwidth") or info.get("width") or 0,
+        found = wiki_json("https://www.wikidata.org/w/api.php", {
+            "action": "wbsearchentities", "format": "json",
+            "search": name, "language": "en", "limit": 8, "type": "item",
         })
-    options.sort(key=lambda d: (d["width"], len(d["title"]) * -1), reverse=True)
+        for entity in found.get("search") or []:
+            aliases = [entity.get("label", "")] + [
+                a for a in (entity.get("aliases") or [])
+                if isinstance(a, str)
+            ]
+            if not any(tokens(alias) == tokens(name) for alias in aliases):
+                continue
+            qid = entity.get("id", "")
+            if not re.fullmatch(r"Q[1-9]\d*", qid):
+                continue
+            record = wiki_json("https://www.wikidata.org/w/api.php", {
+                "action": "wbgetentities", "format": "json", "ids": qid,
+                "props": "claims", "languages": "en",
+            })
+            claims = (
+                (record.get("entities") or {}).get(qid, {}).get("claims") or {}
+            )
+            for statement in claims.get("P18") or []:
+                filename = (
+                    statement.get("mainsnak", {}).get("datavalue", {}).get("value")
+                )
+                if isinstance(filename, str) and re.search(r"\.(jpe?g|png)$", filename, re.I):
+                    print("Identity source: Wikidata", qid, "P18", filename)
+                    return "File:" + filename
+    except (OSError, ValueError, TypeError) as exc:
+        print("Wikidata P18 unavailable:", type(exc).__name__, str(exc)[:140])
+    return None
+
+
+def checked_commons_file(page, person, confirmed_by_wikidata=False):
+    """Validate one individual Commons file against whitelist and attribution."""
+    title = str(page.get("title") or "").removeprefix("File:")
+    if not (confirmed_by_wikidata or named(title, person)):
+        return None
+    entries = page.get("imageinfo") or []
+    if not entries:
+        return None
+    info = entries[0]
+    meta = info.get("extmetadata") or {}
+    license_name = clean_html(
+        (meta.get("LicenseShortName") or {}).get("value") or ""
+    )
+    norm = re.sub(r"[\s_-]+", " ", license_name).strip().upper()
+    permitted = (
+        norm in {"CC0", "CC0 1.0", "PUBLIC DOMAIN", "PD", "PD OLD"}
+        or bool(re.fullmatch(r"CC BY (?:2\.0|2\.5|3\.0|4\.0)", norm))
+    )
+    if not permitted:
+        return None
+    url = str(info.get("thumburl") or info.get("url") or "")
+    uri = urlparse(url)
+    if uri.scheme != "https" or (uri.hostname or "") != "upload.wikimedia.org":
+        return None
+    if not re.search(r"\.(jpe?g|png)(?:\?|$)", uri.path, flags=re.I):
+        return None
+    credits = clean_html((meta.get("Artist") or {}).get("value") or "")
+    if not credits:
+        # Do not publish a CC BY image without a credited author.
+        if not (norm.startswith("PD") or norm in {"CC0", "CC0 1.0", "PUBLIC DOMAIN"}):
+            return None
+        credits = "Dominio público / sin autor identificado"
+    attribution = clean_html((meta.get("Credit") or {}).get("value") or "")
+    width = info.get("thumbwidth") or info.get("width") or 0
+    height = info.get("thumbheight") or info.get("height") or 0
+    return {
+        "url": url, "title": title, "author": credits[:130],
+        "license": license_name, "page": info.get("descriptionurl") or "",
+        "credit": (credits[:65] + " / " + license_name + " / Wikimedia Commons")[:115],
+        "width": width, "height": height,
+        "attribution": attribution[:200],
+        "identity_method": "Wikidata P18" if confirmed_by_wikidata else "Commons exact-name filename",
+    }
+
+
+def licensed_photo(name):
+    """Dynamically find a real, named and reuse-cleared Commons photograph.
+
+    Search order: curated Wikidata P18 image, then title-exact licensed Commons
+    files with expanded queries. An unrelated company logo or guessed portrait
+    is not an acceptable substitute.
+    """
+    api = "https://commons.wikimedia.org/w/api.php"
+    p18 = wikidata_identity_photo(name)
+    if p18:
+        try:
+            data = wiki_json(api, {
+                "action": "query", "format": "json", "titles": p18,
+                "prop": "imageinfo", "iiprop": "url|extmetadata|size",
+                "iiurlwidth": 1280,
+            })
+            for page in ((data.get("query") or {}).get("pages") or {}).values():
+                image = checked_commons_file(page, name, confirmed_by_wikidata=True)
+                if image:
+                    return image
+        except (ValueError, OSError) as exc:
+            print("Commons licensing lookup for P18 unavailable:", type(exc).__name__)
+
+    queries = [
+        '"' + name + '"',
+        "intitle:" + " intitle:".join(tokens(name)[:4]),
+        name + " portrait",
+    ]
+    options = []
+    seen = set()
+    for query in queries:
+        try:
+            data = wiki_json(api, {
+                "action": "query", "format": "json", "generator": "search",
+                "gsrsearch": query, "gsrnamespace": 6, "gsrlimit": 50,
+                "prop": "imageinfo", "iiprop": "url|extmetadata|size",
+                "iiurlwidth": 1280,
+            })
+            pages = (data.get("query") or {}).get("pages") or {}
+            for page in pages.values():
+                image = checked_commons_file(page, name)
+                if image and image["page"] not in seen:
+                    seen.add(image["page"])
+                    options.append(image)
+        except (ValueError, OSError) as exc:
+            print("Commons query failed:", query, type(exc).__name__, str(exc)[:130])
+        if options:
+            break
+    options.sort(key=lambda a: (
+        # Portrait orientation preferred for shorts, then source resolution.
+        int(a["height"] > a["width"]),
+        min(int(a["width"]), 1280),
+    ), reverse=True)
+    if not options:
+        print("No license-cleared named photograph found for:", name)
     return options[0] if options else None
 
 
@@ -235,38 +328,72 @@ def voice_duration(path):
     return duration
 
 
-async def synthesize(text, voice, output):
-    import edge_tts
-    # Newsroom brand is sounded out in English and Spanish.
+def spoken_text(text, voice):
+    """Apply voice-specific brand phonetics without changing the visible script."""
     replacements = {
-        "es": "eme ene short",
-        "en": "em en short",
-        "fr": "ème enne short",
-        "de": "em en short",
-        "it": "emme enne short",
-        "pt": "eme ene short",
-        "ru": "эм эн шорт",
-        "zh": "艾姆恩肖特",
-        "ja": "エムエヌ ショート",
-        "ar": "إم إن شورت",
+        "es": "eme ene short", "en": "em en short",
+        "fr": "ème enne short", "de": "em en short",
+        "it": "emme enne short", "pt": "eme ene short",
+        "ru": "эм эн шорт", "zh": "艾姆恩肖特",
+        "ja": "エムエヌ ショート", "ar": "إم إن شورت",
     }
     locale = voice.split("-", 1)[0]
-    text = re.sub(
-        r"\bMN\s+Short\b", lambda _: replacements.get(locale, "MN Short"),
-        text, flags=re.I,
+    return re.sub(
+        r"\bMN\s*Short\b",
+        lambda _: replacements.get(locale, "MN Short"), text, flags=re.I,
     )
+
+
+def boundary_to_timing(part):
+    """Edge Neural TTS offsets/durations are 100-nanosecond ticks."""
+    if part.get("type") != "WordBoundary":
+        return None
+    word = str(part.get("text") or "").strip()
+    if not word:
+        return None
+    start = max(0, int(part["offset"])) / 10_000_000
+    duration = max(0, int(part["duration"])) / 10_000_000
+    return {"text": word, "start": round(start, 4), "end": round(start + duration, 4)}
+
+
+async def synthesize(text, voice, output):
+    """Generate ONE audio stream and REAL word-boundary timing metadata.
+
+    Never estimate word timing from the number of letters or scene length.
+    Retrying regenerates both MP3 and timestamps together (no stale offsets).
+    """
+    import edge_tts
+
+    rendered = spoken_text(text, voice)
+    locale = voice.split("-", 1)[0]
+    output.parent.mkdir(parents=True, exist_ok=True)
     for attempt in range(3):
+        marks = []
         try:
-            speech = edge_tts.Communicate(text, voice=voice, rate="-4%", volume="+12%")
-            await speech.save(str(output))
+            speech = edge_tts.Communicate(
+                rendered, voice=voice, rate="-4%", volume="+12%",
+                boundary="WordBoundary",
+            )
+            with output.open("wb") as handle:
+                async for part in speech.stream():
+                    if part["type"] == "audio":
+                        handle.write(part["data"])
+                    elif part["type"] == "WordBoundary":
+                        timed = boundary_to_timing(part)
+                        if timed:
+                            marks.append(timed)
             if output.stat().st_size <= 500:
                 raise RuntimeError("TTS returned empty audio")
-            return
+            if not marks:
+                raise RuntimeError("TTS did not provide word boundaries; refuse unsynchronized captions")
+            if any(marks[i]["start"] > marks[i + 1]["start"] for i in range(len(marks)-1)):
+                raise RuntimeError("TTS word-boundary timing is not monotonic")
+            return marks
         except Exception as exc:
             output.unlink(missing_ok=True)
             if attempt == 2:
                 raise RuntimeError(
-                    "Neural TTS failed for " + locale + " after retries: " + type(exc).__name__
+                    "Word-synchronized TTS failed for " + locale + ": " + type(exc).__name__
                 ) from exc
             await asyncio.sleep(2.0 + attempt * 3.0)
 
@@ -344,6 +471,12 @@ async def build(editorial, mode, languages="all"):
         if person and photo_cache.get(person):
             item["image"] = photo_cache[person]["local"]
             item["credit"] = photo_cache[person]["credit"]
+        elif person:
+            raise RuntimeError(
+                "EDITORIAL PHOTO REQUIRED: no authenticated, reuse-cleared "
+                "portrait found for '" + person + "'. Stop this video; "
+                "never replace a real person with initials, a logo or stock."
+            )
 
     durations = {}
     for lang in selected_languages:
@@ -362,11 +495,11 @@ async def build(editorial, mode, languages="all"):
             audio_rel = "audio/" + lang + "_" + str(index).zfill(2) + ".mp3"
             audio_file = PUBLIC / audio_rel
             audio_file.parent.mkdir(parents=True, exist_ok=True)
-            await synthesize(sentence, voice, audio_file)
+            word_timings = await synthesize(sentence, voice, audio_file)
             frames = max(45, math.ceil(voice_duration(audio_file) * FPS) + 5)
             scenes.append({
                 "text": sentence, "audio": audio_rel, "startFrame": cursor,
-                "durationFrames": frames, **picture,
+                "durationFrames": frames, "wordTimings": word_timings, **picture,
             })
             cursor += frames
         if cursor > 95 * FPS:

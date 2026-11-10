@@ -34,13 +34,24 @@ function Nameplate() {
   </div>;
 }
 
-function VoiceCaption({text,frame,duration,lang}) {
+function VoiceCaption({text,wordTimings,frame,fps,lang}) {
+  // Each boundary comes from the actual Edge TTS audio stream in 100ns ticks.
+  // A segment-level linear estimate causes visible drift and is prohibited.
+  if (!Array.isArray(wordTimings) || wordTimings.length===0) {
+    throw new Error("Missing real voice word boundaries for " + lang + ": " + String(text));
+  }
   const cjk = lang==="zh" || lang==="ja";
-  const words = cjk ? Array.from(String(text||"")).filter(c => c.trim()) : String(text||"").split(/\s+/).filter(Boolean);
-  const current=Math.floor(interpolate(frame,[0,Math.max(1,duration-1)],[0,words.length],{extrapolateLeft:"clamp",extrapolateRight:"clamp"}));
-  const size = cjk ? (words.length>65?41:words.length>38?48:57) : (words.length>23?46:words.length>14?53:60);
+  const seconds=frame/fps;
+  const active=wordTimings.findIndex((word)=>
+    seconds>=word.start && seconds<word.end+0.035
+  );
+  const size=cjk ? (wordTimings.length>38?43:wordTimings.length>22?50:58)
+    : wordTimings.length>23?46:wordTimings.length>14?53:60;
   return <div style={{fontSize:size,lineHeight:1.24,fontWeight:820,overflowWrap:"anywhere"}}>
-    {words.map((word,i)=><React.Fragment key={i}><span style={{color:i===current?RED:i<current?WHITE:MUTED}}>{word}</span>{cjk?"":" "}</React.Fragment>)}
+    {wordTimings.map((word,i)=><React.Fragment key={i}>
+      <span style={{color:i===active?RED:seconds>=word.end?WHITE:MUTED}}>{word.text}</span>
+      {cjk?"":" "}
+    </React.Fragment>)}
   </div>;
 }
 
@@ -105,7 +116,7 @@ function Display({item,frame,fps}){
   </div>;
 }
 
-function Segment({item,index,count,publisher,duration}){
+function Segment({item,index,count,publisher,duration,neutralMaster=false}){
   const frame=useCurrentFrame();
   const {fps}=useVideoConfig();
   const progress=(100*(index+Math.min(frame,duration)/duration)/count)+"%";
@@ -118,7 +129,7 @@ function Segment({item,index,count,publisher,duration}){
       <div style={{height:"100%",background:RED,width:progress}}/>
     </div>
     <div style={{flex:1,display:"flex",alignItems:"center",width:"100%"}}><Display item={item} frame={frame} fps={fps}/></div>
-    <div style={{minHeight:350,display:"flex",alignItems:"center",padding:"20px 5px 30px"}}><VoiceCaption text={item.text} frame={frame} duration={duration} lang={item.language}/></div>
+    {neutralMaster ? <div style={{minHeight:350,display:"flex",justifyContent:"center",alignItems:"center",fontSize:38,fontWeight:800,letterSpacing:3,color:MUTED,direction:"ltr"}}>MEDIA NEWS · MNShort</div> : <div style={{minHeight:350,display:"flex",alignItems:"center",padding:"20px 5px 30px"}}><VoiceCaption text={item.text} wordTimings={item.wordTimings} frame={frame} fps={fps} lang={item.language}/></div>}
     <div style={{height:2,background:"#38556b",marginBottom:22}}/>
     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:12}}>
       <div style={{fontSize:23,fontWeight:800,color:MUTED,direction:"ltr",whiteSpace:"nowrap"}}>{EDITORIAL_SIGNATURE}</div>
@@ -127,11 +138,11 @@ function Segment({item,index,count,publisher,duration}){
   </AbsoluteFill>;
 }
 
-export const NewsVideo=({language="es",publisher="Media News",scenes=[]})=>(
+export const NewsVideo=({language="es",publisher="Media News",scenes=[],neutralMaster=false})=>(
   <AbsoluteFill style={{background:INK}}>
     {(Array.isArray(scenes)?scenes:[]).map((scene,i)=>(
       <Sequence key={i} from={scene.startFrame} durationInFrames={scene.durationFrames}>
-        <Segment item={{...scene,language}} index={i} count={scenes.length} publisher={publisher} duration={scene.durationFrames}/>
+        <Segment item={{...scene,language}} index={i} count={scenes.length} publisher={publisher} duration={scene.durationFrames} neutralMaster={neutralMaster}/>
         {scene.audio && <Audio src={staticFile(scene.audio)} volume={1}/>}
       </Sequence>
     ))}

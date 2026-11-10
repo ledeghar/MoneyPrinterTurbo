@@ -6,7 +6,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from scripts.mn_short_motion import MOTION, VOICES, cue, named, split_sentences
+from scripts.mn_short_motion import MOTION, VOICES, cue, named, split_sentences, boundary_to_timing, checked_commons_file
 
 
 class MotionPilotTests(unittest.TestCase):
@@ -65,6 +65,7 @@ class MotionPilotTests(unittest.TestCase):
         async def fake_voice(_text, _voice, path):
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(b"fake audio for offline test")
+            return [{"text": "Prueba", "start": 0.1, "end": 0.5}]
 
         with tempfile.TemporaryDirectory() as temp:
             base = Path(temp)
@@ -85,6 +86,68 @@ class MotionPilotTests(unittest.TestCase):
                 )
                 self.assertEqual(metadata["languages"], ["es"])
                 self.assertEqual(set(metadata["aligned_translations"]), {"es"})
+
+    def test_edge_word_offsets_are_real_100ns_ticks_not_linear_averages(self):
+        self.assertEqual(
+            boundary_to_timing({"type": "WordBoundary", "text": "Huang", "offset": 12300000, "duration": 7000000}),
+            {"text": "Huang", "start": 1.23, "end": 1.93}
+        )
+        self.assertIsNone(boundary_to_timing({"type": "audio", "data": b"MP3"}))
+
+    def test_commons_licenses_and_full_name_are_required_for_actual_photograph(self):
+        source = {
+            "title": "File:Jensen Huang (cropped) (2024).jpg",
+            "imageinfo": [{
+                "thumburl": "https://upload.wikimedia.org/wikipedia/commons/thumb/jensen.jpg",
+                "descriptionurl": "https://commons.wikimedia.org/wiki/File:Jensen_Huang_2024.jpg",
+                "thumbwidth": 1000, "thumbheight": 1500,
+                "extmetadata": {
+                    "LicenseShortName": {"value": "CC BY 4.0"},
+                    "Artist": {"value": "Peter Dasilva"},
+                }
+            }],
+        }
+        accepted = checked_commons_file(source, "Jensen Huang")
+        self.assertEqual(accepted["identity_method"], "Commons exact-name filename")
+        self.assertEqual(accepted["license"], "CC BY 4.0")
+        self.assertIsNone(checked_commons_file(source, "Another Real Person"))
+        bad = json.loads(json.dumps(source))
+        bad["imageinfo"][0]["extmetadata"]["LicenseShortName"]["value"] = "All rights reserved"
+        self.assertIsNone(checked_commons_file(bad, "Jensen Huang"))
+
+    def test_named_person_without_verified_photo_stops_draft(self):
+        from scripts import mn_short_motion as motion
+        editorial = motion.demo_editorial()
+        with tempfile.TemporaryDirectory() as temp:
+            base = Path(temp)
+            with patch.object(motion, "PUBLIC", base / "public"), \
+                    patch.object(motion, "PROPS", base / "props"), \
+                    patch.object(motion, "OUTPUT", base / "output"), \
+                    patch.object(motion, "save_commons_photo", return_value=None):
+                with self.assertRaisesRegex(RuntimeError, "EDITORIAL PHOTO REQUIRED"):
+                    asyncio.run(motion.build(editorial, "demo", languages="es"))
+
+    def test_ten_audio_tracks_share_one_master_timeline_without_speed_changes(self):
+        from scripts import mn_short_multiaudio as mux
+        def scenes(durations):
+            return [
+            {"kind":"headline","audio":"audio/sample.mp3","text":"La noticia.",
+             "wordTimings":[{"text":"La","start":0.0,"end":0.1}],
+             "durationFrames":int(d)} for d in durations
+        ]
+        packs = {
+            lang: {"scenes": scenes([150,180] if lang == "de" else [120,170])}
+            for lang, _iso, _name in mux.LANGS
+        }
+        self.assertEqual(mux.master_durations(packs), [150,180])
+        self.assertEqual(mux.srt_clock(65.234), "00:01:05,234")
+        with tempfile.TemporaryDirectory() as tmp:
+            srt = Path(tmp) / "es.srt"
+            mux.create_srt(packs["es"], [150,180], srt)
+            lines = srt.read_text(encoding="utf-8-sig")
+            self.assertIn("00:00:00,000 --> 00:00:05,000", lines)
+            self.assertIn("00:00:05,000 --> 00:00:11,000", lines)
+        self.assertEqual(len(mux.LANGS), 10)
 
     def test_canonical_narration_is_split_into_sentences(self):
         self.assertEqual(split_sentences("A factual statement. Another statement."), ["A factual statement.", "Another statement."])
