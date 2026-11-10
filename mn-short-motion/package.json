@@ -1,0 +1,14 @@
+{
+  "name": "mn-short-motion",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "render": "remotion render src/index.jsx"
+  },
+  "dependencies": {
+    "@remotion/cli": "4.0.539",
+    "remotion": "4.0.539",
+    "react": "18.3.1",
+    "react-dom": "18.3.1"
+  }
+}

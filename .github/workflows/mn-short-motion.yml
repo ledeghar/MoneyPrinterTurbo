@@ -1,0 +1,144 @@
+name: MN Short - Motion graphics in 10 languages (review only)
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'Choose demo (no API key) or live (current news via Gemini)'
+        type: choice
+        required: true
+        default: demo
+        options:
+          - demo
+          - live
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/mn-short-motion.yml
+      - mn-short-motion/**
+      - scripts/mn_short_motion.py
+      - scripts/mn_short_motion_translate.py
+      - test/services/test_mn_short_motion.py
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mn-short-motion-${{ github.ref }}-${{ github.event_name }}
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    name: Prepare ten aligned multilingual audio and storyboards
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    env:
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      GEMINI_MODEL: gemini-3.5-flash-lite
+      MOTION_MODE: ${{ inputs.mode || 'demo' }}
+      PYTHONUNBUFFERED: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Validate ten-language scripts and Python syntax
+        run: |
+          python -m compileall -q scripts/mn_short_motion.py scripts/mn_short_motion_translate.py
+          python -m unittest discover -s test/services -p test_mn_short_motion.py
+      - name: Install voice synthesizer
+        run: python -m pip install --disable-pip-version-check edge-tts==7.3.1
+      - name: Check FFprobe for exact speech timing
+        run: ffprobe -version | head -n 1
+      - name: Select one actual sourced RSS story and write ES/EN script
+        if: ${{ env.MOTION_MODE == 'live' }}
+        run: python scripts/mn_short_cloud.py prepare
+      - name: Translate the SAME Spanish news into nine other languages
+        if: ${{ env.MOTION_MODE == 'live' }}
+        run: python scripts/mn_short_motion_translate.py
+      - name: Generate the ten synchronized audio and scene manifests
+        run: python scripts/mn_short_motion.py --mode "$MOTION_MODE"
+      - name: Verify every locale has the same storyboard size
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          locales = ('es','en','fr','de','it','pt','ru','zh','ja','ar')
+          props = [json.loads((Path('mn-short-motion/props') / (lang + '.json')).read_text(encoding='utf-8')) for lang in locales]
+          scene_types = [[scene['kind'] for scene in pack['scenes']] for pack in props]
+          if len({tuple(x) for x in scene_types}) != 1:
+              raise SystemExit('Visual storyboards differ between languages')
+          if any(not data['totalFrames'] or not data['scenes'] for data in props):
+              raise SystemExit('Empty video timeline found')
+          print('Ten localized screenplays validated; one shared scene order; separate voice timings.')
+          PY
+      - name: Preserve image attribution and ten voice tracks as a review package
+        uses: actions/upload-artifact@v4
+        with:
+          name: MNShort-10-Language-Assets-${{ github.run_number }}
+          path: |
+            mn-short-motion/public/
+            mn-short-motion/props/
+            mn-short-output-motion/
+          if-no-files-found: error
+          retention-days: 3
+          compression-level: 1
+
+  render:
+    name: Render ${{ matrix.language }} motion graphics at 1080x1920
+    needs: prepare
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    strategy:
+      fail-fast: false
+      max-parallel: 5
+      matrix:
+        language: [es, en, fr, de, it, pt, ru, zh, ja, ar]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: MNShort-10-Language-Assets-${{ github.run_number }}
+          path: .
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Install typefaces for European, Russian, Chinese, Japanese and Arabic typography
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends fonts-noto-core fonts-noto-cjk
+          fc-cache -f >/dev/null
+      - name: Install Remotion compositor
+        working-directory: mn-short-motion
+        run: npm install --no-audit --no-fund
+      - name: Render narrated vertical video
+        working-directory: mn-short-motion
+        env:
+          VIDEO_LANG: ${{ matrix.language }}
+        run: |
+          npx remotion render src/index.jsx MNShortEditorial \
+            "../mn-short-output-motion/MNShort_MOTION_$VIDEO_LANG.mp4" \
+            --props="./props/$VIDEO_LANG.json" \
+            --codec=h264 \
+            --pixel-format=yuv420p \
+            --crf=21 \
+            --concurrency=2
+      - name: Assert MP4 exists and is not an empty file
+        env:
+          VIDEO_LANG: ${{ matrix.language }}
+        run: |
+          test -s "mn-short-output-motion/MNShort_MOTION_$VIDEO_LANG.mp4"
+          ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1 \
+            "mn-short-output-motion/MNShort_MOTION_$VIDEO_LANG.mp4"
+      - name: Export review MP4 (never publish to social networks)
+        uses: actions/upload-artifact@v4
+        with:
+          name: MNShort-MOTION-${{ matrix.language }}-${{ github.run_number }}
+          path: mn-short-output-motion/MNShort_MOTION_${{ matrix.language }}.mp4
+          retention-days: 3
+          compression-level: 0
+          if-no-files-found: error
+
+# No YouTube, TikTok, Instagram or Facebook upload is performed by this workflow.
+# Live mode requires GEMINI_API_KEY; demo mode uses explanatory demo copy.
