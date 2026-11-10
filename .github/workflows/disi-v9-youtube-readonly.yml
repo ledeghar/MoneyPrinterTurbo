@@ -1,0 +1,63 @@
+name: DISI - Verificar acceso YouTube sin publicar
+on:
+  push:
+    branches: [main, disi-v9-production-template-20261110]
+    paths: [.github/workflows/disi-v9-youtube-readonly.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  check-oauth:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      YOUTUBE_CLIENT_ID: ${{ secrets.YOUTUBE_CLIENT_ID }}
+      YOUTUBE_CLIENT_SECRET: ${{ secrets.YOUTUBE_CLIENT_SECRET }}
+      YOUTUBE_REFRESH_TOKEN: ${{ secrets.YOUTUBE_REFRESH_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Verificar autenticacion actual sin subir videos
+        run: |
+          python - <<'PY'
+          import os,runpy
+          expected=('YOUTUBE_CLIENT_ID','YOUTUBE_CLIENT_SECRET','YOUTUBE_REFRESH_TOKEN')
+          absent=[x for x in expected if not os.environ.get(x)]
+          if absent:
+              print('DISI_YOUTUBE_NOT_READY: faltan secretos: '+', '.join(absent))
+          else:
+              runpy.run_path('scripts/mn_short_oauth_check.py',run_name='__main__')
+          PY
+
+      - name: Identificar canal conectado con OAuth (sin publicar)
+        run: |
+          python - <<'PY'
+          import os,json
+          from urllib.parse import urlencode
+          from urllib.request import Request,urlopen
+          from urllib.error import HTTPError,URLError
+          params=urlencode({
+            'client_id':os.getenv('YOUTUBE_CLIENT_ID',''),
+            'client_secret':os.getenv('YOUTUBE_CLIENT_SECRET',''),
+            'refresh_token':os.getenv('YOUTUBE_REFRESH_TOKEN',''),
+            'grant_type':'refresh_token'
+          }).encode()
+          try:
+            with urlopen(Request('https://oauth2.googleapis.com/token',params,
+                headers={'Content-Type':'application/x-www-form-urlencoded'}),timeout=25) as r:
+              token=json.load(r)['access_token']
+            req=Request('https://www.googleapis.com/youtube/v3/channels?part=id,snippet&mine=true',
+                headers={'Authorization':'Bearer '+token})
+            with urlopen(req,timeout=25) as r:
+              data=json.load(r)
+            for item in data.get('items',[]):
+              print('CHANNEL_CONNECTED ID=',item['id'],' TITLE=',item.get('snippet',{}).get('title',''))
+            if not data.get('items'):
+              print('CHANNEL_UNKNOWN: OAuth valid but no accessible channel returned')
+          except HTTPError as exc:
+            print('CHANNEL_NOT_VERIFIED: YouTube API returned HTTP '+str(exc.code)+'; never upload until channel confirmed')
+          except (URLError,KeyError):
+            print('CHANNEL_NOT_VERIFIED: Could not establish destination; never upload until confirmed')
+          PY
