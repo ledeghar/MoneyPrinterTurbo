@@ -15,7 +15,13 @@ jobs:
           set -euxo pipefail
           curl --fail --location --retry 3 --retry-delay 4 --connect-timeout 30 --max-time 240 -o pelayo.wav 'https://resource2.heygen.ai/text_to_speech/e4ed5b93dd4c40e880e82912fdd31ed2/40ded5e9651a43a58b77f72699b95688/id=3159ff4df3334c2cb3dd69e8e70ddc3e.wav'
           test "$(wc -c < pelayo.wav)" -gt 100000
-          ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1 pelayo.wav
+          python - <<'PY'
+          import wave
+          with wave.open('pelayo.wav') as w:
+              d = w.getnframes() / w.getframerate()
+              print(f'Pelayo original: {d:.3f}s, {w.getframerate()}Hz')
+              assert 40 < d < 52, d
+          PY
       - name: Guardar la locución exacta sin editar
         uses: actions/upload-artifact@v4
         with:
