@@ -1,0 +1,32 @@
+name: DISI - Verificar acceso YouTube sin publicar
+on:
+  push:
+    branches: [main, disi-v9-production-template-20261110]
+    paths: [.github/workflows/disi-v9-youtube-readonly.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  check-oauth:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      YOUTUBE_CLIENT_ID: ${{ secrets.YOUTUBE_CLIENT_ID }}
+      YOUTUBE_CLIENT_SECRET: ${{ secrets.YOUTUBE_CLIENT_SECRET }}
+      YOUTUBE_REFRESH_TOKEN: ${{ secrets.YOUTUBE_REFRESH_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Verificar autenticacion actual sin subir videos
+        run: |
+          python - <<'PY'
+          import os,runpy
+          expected=('YOUTUBE_CLIENT_ID','YOUTUBE_CLIENT_SECRET','YOUTUBE_REFRESH_TOKEN')
+          absent=[x for x in expected if not os.environ.get(x)]
+          if absent:
+              print('DISI_YOUTUBE_NOT_READY: faltan secretos: '+', '.join(absent))
+          else:
+              runpy.run_path('scripts/mn_short_oauth_check.py',run_name='__main__')
+          PY
