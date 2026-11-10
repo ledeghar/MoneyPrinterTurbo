@@ -67,11 +67,11 @@ function Body({scenes=[], captions=[], audio}) {
       fontSize:17,fontFamily:"DejaVu Sans, sans-serif",letterSpacing:1.5
     }}>DISI / MEDIOS · INVESTIGACIÓN · TECNOLOGÍA</div>
     <div style={{position:"absolute",left:0,top:250,width:720,height:720,overflow:"hidden"}}>
-      <OffthreadVideo src={at(active.file)}
-        startFrom={active.sourceStartFrame || 0}
-        endAt={(active.sourceStartFrame || 0)+active.durationFrames}
-        muted
-        style={{width:"100%",height:"100%",objectFit:"cover"}}/>
+      {scenes.map((scene, i) => <Sequence key={i} from={scene.startFrame} durationInFrames={scene.durationFrames}>
+        <OffthreadVideo src={at(scene.file)}
+          startFrom={scene.sourceStartFrame || 0}
+          muted style={{width:"100%",height:"100%",objectFit:"cover"}}/>
+      </Sequence>)}
     </div>
     <div style={{position:"absolute",left:0,top:971,width:720,height:309,backgroundColor:NAVY}}/>
     <div style={{position:"absolute",left:30,top:1018,width:5,height:136,background:RED}}/>
