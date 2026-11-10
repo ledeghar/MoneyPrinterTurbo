@@ -1,4 +1,4 @@
-name: MN Short - Six editorial Shorts per day (ES)
+name: MN Short - Legacy editorial grid (manual only)
 
 on:
   workflow_dispatch:
@@ -15,32 +15,18 @@ on:
           - '16:00'
           - '18:00'
           - '20:00'
-  # Prepare 30 minutes before each target release time.
-  schedule:
-    - cron: '30 7 * * *'
-      timezone: 'Europe/Madrid'
-    - cron: '30 9 * * *'
-      timezone: 'Europe/Madrid'
-    - cron: '30 11 * * *'
-      timezone: 'Europe/Madrid'
-    - cron: '30 15 * * *'
-      timezone: 'Europe/Madrid'
-    - cron: '30 17 * * *'
-      timezone: 'Europe/Madrid'
-    - cron: '30 19 * * *'
-      timezone: 'Europe/Madrid'
 
 permissions:
   contents: write
 
 concurrency:
-  group: mn-short-six-beats
+  group: mn-short-legacy-manual
   cancel-in-progress: false
 
 jobs:
   produce-one-short:
-    # Scheduled runs are inactive until review and explicit repository opt-in.
-    if: ${{ github.event_name == 'workflow_dispatch' || vars.MNSHORT_SCHEDULE_ENABLED == 'true' }}
+    # Legacy manual-only; all recurring publishing moves to the weekly researcher.
+    if: ${{ github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
     timeout-minutes: 65
     env:
@@ -158,7 +144,7 @@ jobs:
           compression-level: 0
 
 # GitHub Actions repository Variables:
-# MNSHORT_SCHEDULE_ENABLED=true -> enable six-slot cloud generation.
+# Six daily cron schedules have been REMOVED. This workflow is manual-only.
 # MNSHORT_PUBLICATION_ENABLED=true -> consider scheduling public uploads,
 # but ONLY if release_qa verifies original factual reporting, licensed synchronized
 # scenes, video format, subject identity and a valid MP4. Current Pexels-only
