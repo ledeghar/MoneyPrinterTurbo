@@ -235,38 +235,72 @@ def voice_duration(path):
     return duration
 
 
-async def synthesize(text, voice, output):
-    import edge_tts
-    # Newsroom brand is sounded out in English and Spanish.
+def spoken_text(text, voice):
+    """Apply voice-specific brand phonetics without changing the visible script."""
     replacements = {
-        "es": "eme ene short",
-        "en": "em en short",
-        "fr": "ème enne short",
-        "de": "em en short",
-        "it": "emme enne short",
-        "pt": "eme ene short",
-        "ru": "эм эн шорт",
-        "zh": "艾姆恩肖特",
-        "ja": "エムエヌ ショート",
-        "ar": "إم إن شورت",
+        "es": "eme ene short", "en": "em en short",
+        "fr": "ème enne short", "de": "em en short",
+        "it": "emme enne short", "pt": "eme ene short",
+        "ru": "эм эн шорт", "zh": "艾姆恩肖特",
+        "ja": "エムエヌ ショート", "ar": "إم إن شورت",
     }
     locale = voice.split("-", 1)[0]
-    text = re.sub(
-        r"\bMN\s+Short\b", lambda _: replacements.get(locale, "MN Short"),
-        text, flags=re.I,
+    return re.sub(
+        r"\bMN\s*Short\b",
+        lambda _: replacements.get(locale, "MN Short"), text, flags=re.I,
     )
+
+
+def boundary_to_timing(part):
+    """Edge Neural TTS offsets/durations are 100-nanosecond ticks."""
+    if part.get("type") != "WordBoundary":
+        return None
+    word = str(part.get("text") or "").strip()
+    if not word:
+        return None
+    start = max(0, int(part["offset"])) / 10_000_000
+    duration = max(0, int(part["duration"])) / 10_000_000
+    return {"text": word, "start": round(start, 4), "end": round(start + duration, 4)}
+
+
+async def synthesize(text, voice, output):
+    """Generate ONE audio stream and REAL word-boundary timing metadata.
+
+    Never estimate word timing from the number of letters or scene length.
+    Retrying regenerates both MP3 and timestamps together (no stale offsets).
+    """
+    import edge_tts
+
+    rendered = spoken_text(text, voice)
+    locale = voice.split("-", 1)[0]
+    output.parent.mkdir(parents=True, exist_ok=True)
     for attempt in range(3):
+        marks = []
         try:
-            speech = edge_tts.Communicate(text, voice=voice, rate="-4%", volume="+12%")
-            await speech.save(str(output))
+            speech = edge_tts.Communicate(
+                rendered, voice=voice, rate="-4%", volume="+12%",
+                boundary="WordBoundary",
+            )
+            with output.open("wb") as handle:
+                async for part in speech.stream():
+                    if part["type"] == "audio":
+                        handle.write(part["data"])
+                    elif part["type"] == "WordBoundary":
+                        timed = boundary_to_timing(part)
+                        if timed:
+                            marks.append(timed)
             if output.stat().st_size <= 500:
                 raise RuntimeError("TTS returned empty audio")
-            return
+            if not marks:
+                raise RuntimeError("TTS did not provide word boundaries; refuse unsynchronized captions")
+            if any(marks[i]["start"] > marks[i + 1]["start"] for i in range(len(marks)-1)):
+                raise RuntimeError("TTS word-boundary timing is not monotonic")
+            return marks
         except Exception as exc:
             output.unlink(missing_ok=True)
             if attempt == 2:
                 raise RuntimeError(
-                    "Neural TTS failed for " + locale + " after retries: " + type(exc).__name__
+                    "Word-synchronized TTS failed for " + locale + ": " + type(exc).__name__
                 ) from exc
             await asyncio.sleep(2.0 + attempt * 3.0)
 
@@ -362,11 +396,11 @@ async def build(editorial, mode, languages="all"):
             audio_rel = "audio/" + lang + "_" + str(index).zfill(2) + ".mp3"
             audio_file = PUBLIC / audio_rel
             audio_file.parent.mkdir(parents=True, exist_ok=True)
-            await synthesize(sentence, voice, audio_file)
+            word_timings = await synthesize(sentence, voice, audio_file)
             frames = max(45, math.ceil(voice_duration(audio_file) * FPS) + 5)
             scenes.append({
                 "text": sentence, "audio": audio_rel, "startFrame": cursor,
-                "durationFrames": frames, **picture,
+                "durationFrames": frames, "wordTimings": word_timings, **picture,
             })
             cursor += frames
         if cursor > 95 * FPS:
