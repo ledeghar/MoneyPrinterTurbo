@@ -1,0 +1,122 @@
+name: MNShort - Un video semanal (miercoles al mediodia, Madrid)
+on:
+  schedule:
+    - cron: '15 8 * * 3'
+      timezone: 'Europe/Madrid'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: mnshort-one-weekly-wednesday
+  cancel-in-progress: false
+jobs:
+  trend-to-draft:
+    name: Investigar tendencia >1M, producir diez idiomas, verificar antes de publicar
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    env:
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      GEMINI_MODEL: gemini-3.5-flash-lite
+      YOUTUBE_DATA_API_KEY: ${{ secrets.YOUTUBE_DATA_API_KEY }}
+      YOUTUBE_CLIENT_ID: ${{ secrets.YOUTUBE_CLIENT_ID }}
+      YOUTUBE_CLIENT_SECRET: ${{ secrets.YOUTUBE_CLIENT_SECRET }}
+      YOUTUBE_REFRESH_TOKEN: ${{ secrets.YOUTUBE_REFRESH_TOKEN }}
+      PYTHONUNBUFFERED: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Instalar FFmpeg, voces y fuentes
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends ffmpeg fonts-noto-core fonts-noto-cjk
+          python -m pip install --disable-pip-version-check requests edge-tts==7.3.1
+      - name: Historial editorial deduplicado
+        run: |
+          git fetch --no-tags origin refs/heads/mnshort-history:refs/remotes/origin/mnshort-history
+          git show refs/remotes/origin/mnshort-history:mnshort-history.json > mnshort-history.json
+      - name: Investigar micronichos populares de los ultimos siete dias
+        run: python scripts/mn_short_weekly_niche.py --output weekly-niche.json
+      - name: Encontrar noticia verificable alineada al micronicho
+        run: python scripts/mn_short_ecosystem.py prepare --slot 12:00 --topic-file weekly-niche.json
+      - name: Traducir narracion a nueve idiomas
+        run: python scripts/mn_short_motion_translate.py
+      - name: Crear diez voces con limites de palabra reales
+        run: python scripts/mn_short_motion.py --mode live
+      - name: Calcular duraciones de todas las escenas sin acelerar voz
+        run: python scripts/mn_short_multiaudio.py plan
+      - name: Render borrador Remotion
+        working-directory: mn-short-motion
+        run: |
+          npm install --no-audit --no-fund
+          npx remotion render src/index.jsx MNShortEditorial \
+            ../mn-short-output-motion/MNShort_MASTER_SILENT.mp4 \
+            --props=./props/master.json --codec=h264 --pixel-format=yuv420p --crf=21 --concurrency=2
+      - name: Empaquetar master 10 audios y 10 subtitulos
+        run: python scripts/mn_short_multiaudio.py package
+      - name: Verificar duracion bajo 59 segundos, pista audible y diez idiomas
+        run: python scripts/mnshort_v9_template.py verify --master mn-short-output-motion/MNShort_MASTER_10_AUDIO_10_SUBTITLES.mp4
+      - name: Extraer un unico corte en espanol y conservar originales
+        run: |
+          mkdir -p mn-short-output
+          ffmpeg -hide_banner -loglevel error -y -i mn-short-output-motion/MNShort_MASTER_10_AUDIO_10_SUBTITLES.mp4 \
+            -map 0:v:0 -map 0:a:0 -c copy -movflags +faststart mn-short-output/MNShort_SEMANAL_ES.mp4
+          cp mn_short_editorial.json mn-short-output/editorial.json
+          cp weekly-niche.json mn-short-output/ESTUDIO_NICHO.json
+      - name: Control estricto de hechos, licencia, identidad y escenas
+        id: release_qa
+        run: python scripts/mn_short_release_gate.py
+      - name: Verificar que realmente se empleo plantilla V9 y cierre Canva
+        id: exact_v9
+        run: |
+          python - <<'PY'
+          import json,os
+          from pathlib import Path
+          proof=Path("mn-short-output-motion/V9_RENDER_QA.json")
+          valid=False
+          if proof.is_file():
+            data=json.loads(proof.read_text())
+            valid=(data.get("original_canva_assets_verified") is True
+                   and data.get("original_v6_outro_verified") is True
+                   and data.get("audio_and_subtitle_timing_verified") is True
+                   and data.get("rendered_mp4_sha256_verified") is True)
+          with open(os.environ["GITHUB_OUTPUT"],"a") as f:
+            f.write("validated="+str(valid).lower()+"\n")
+          print("V9 verification:",valid)
+          PY
+      - name: Subir un solo Short con estreno miercoles a las 12
+        if: ${{ vars.MNSHORT_WEEKLY_PUBLICATION_ENABLED == 'true' && github.event_name == 'schedule' && steps.release_qa.outputs.approved == 'true' && steps.exact_v9.outputs.validated == 'true' }}
+        env:
+          MNSHORT_PUBLICATION_ENABLED: 'true'
+          MNSHORT_EXPECTED_CHANNEL_ID: ${{ vars.MNSHORT_EXPECTED_CHANNEL_ID }}
+        run: |
+          python scripts/mn_short_youtube_channel_guard.py
+          python scripts/mn_short_publish_scheduled.py
+      - name: Cargar los diez SRT automaticamente
+        if: ${{ vars.MNSHORT_WEEKLY_PUBLICATION_ENABLED == 'true' && github.event_name == 'schedule' && steps.release_qa.outputs.approved == 'true' && steps.exact_v9.outputs.validated == 'true' }}
+        run: |
+          python scripts/mn_short_youtube_captions.py \
+            --video-id-file mn-short-output/YOUTUBE_PUBLICATION.json \
+            --srt-folder mn-short-output-motion
+      - name: Guardar informe, video, audio y subtitulos incluso ante errores
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: MNShort-Weekly-${{ github.run_number }}
+          path: |
+            weekly-niche.json
+            mn_short_editorial.json
+            mn-short-output/
+            mn-short-output-motion/MNShort_MASTER_10_AUDIO_10_SUBTITLES.mp4
+            mn-short-output-motion/YT_DUB_*.m4a
+            mn-short-output-motion/SUBTITULOS_*.srt
+          if-no-files-found: warn
+          retention-days: 30
+          compression-level: 0
+# Unico calendario semanal en Madrid. Actualizaciones autonomas por GitHub Actions.
+# Si no hay datos de tendencia, verificaciones editoriales, V9 original o permisos, no se publica.
+# Audio multilingue adicional de YouTube Studio carece de API publica.
