@@ -129,7 +129,8 @@ class MotionPilotTests(unittest.TestCase):
 
     def test_ten_audio_tracks_share_one_master_timeline_without_speed_changes(self):
         from scripts import mn_short_multiaudio as mux
-        scenes = lambda durations: [
+        def scenes(durations):
+            return [
             {"kind":"headline","audio":"audio/sample.mp3","text":"La noticia.",
              "wordTimings":[{"text":"La","start":0.0,"end":0.1}],
              "durationFrames":int(d)} for d in durations
