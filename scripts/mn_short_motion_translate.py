@@ -14,7 +14,7 @@ from pathlib import Path
 import re
 from urllib.request import Request, urlopen
 from urllib.error import HTTPError
-from scripts.mn_short_motion import split_sentences
+from mn_short_motion import split_sentences
 
 ROOT = Path(__file__).resolve().parents[1]
 LANGUAGES = {
