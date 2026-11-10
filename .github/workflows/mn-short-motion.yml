@@ -19,6 +19,7 @@ on:
       - mn-short-motion/**
       - scripts/mn_short_motion.py
       - scripts/mn_short_motion_translate.py
+      - test/services/test_mn_short_motion.py
 
 permissions:
   contents: read
@@ -42,6 +43,10 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+      - name: Validate ten-language scripts and Python syntax
+        run: |
+          python -m compileall -q scripts/mn_short_motion.py scripts/mn_short_motion_translate.py
+          python -m unittest discover -s test/services -p test_mn_short_motion.py
       - name: Install voice synthesizer
         run: python -m pip install --disable-pip-version-check edge-tts==7.3.1
       - name: Check FFprobe for exact speech timing
