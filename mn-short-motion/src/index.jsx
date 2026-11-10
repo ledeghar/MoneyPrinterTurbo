@@ -10,6 +10,7 @@ const Root = () => (
     width={1080}
     height={1920}
     durationInFrames={1200}
+    calculateMetadata={({props}) => ({durationInFrames: Math.max(30, Number(props.totalFrames) || 1200)})}
     defaultProps={{
       language: "es", storyTitle: "MN Short", publisher: "Media News",
       totalFrames: 1200, scenes: [],
