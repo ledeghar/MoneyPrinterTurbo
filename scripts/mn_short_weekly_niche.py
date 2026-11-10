@@ -112,9 +112,10 @@ def rank_niches(videos: dict, now: datetime) -> list[dict]:
 
 def gather(now: datetime, credentials: tuple) -> dict:
     cutoff=(now-timedelta(days=LOOKBACK_DAYS)).strftime("%Y-%m-%dT%H:%M:%SZ")
-    seen={n:{} for n in NICHES}
+    seen={n+"::"+q:{} for n,queries in NICHES.items() for q in queries}
     for niche,queries in NICHES.items():
         for phrase in queries:
+            search_key=niche+"::"+phrase
             discovery=api("search",{"part":"snippet","q":phrase,
                 "type":"video","videoDuration":"short",
                 "order":"viewCount","maxResults":20,
@@ -137,11 +138,15 @@ def gather(now: datetime, credentials: tuple) -> dict:
                     "duration_seconds":duration,
                 }
                 if item["id"]:
-                    seen[niche][item["id"]]=item
+                    seen[search_key][item["id"]]=item
     ranked=rank_niches({k:list(v.values()) for k,v in seen.items()},now)
     if not ranked:
         raise RuntimeError("No niche meets minimum: 2 distinct recent Shorts, "
                            "each >=1M verified views from >=2 channels; skip publication")
+    for candidate in ranked:
+        category,query=candidate["topic"].split("::",1)
+        candidate["topic"]=category
+        candidate["niche_query"]=query
     return {"checked_at_utc":now.isoformat(),"window_days":LOOKBACK_DAYS,
             "minimum_views_per_example":MIN_VIEWS_PER_HIT,
             "chosen":ranked[0],"ranking":ranked,
