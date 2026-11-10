@@ -90,8 +90,7 @@ jobs:
       - name: Inspect technical render metadata
         run: |
           test -s mn-short-output-motion/MNShort_MOTION_es.mp4
-          ffprobe -v error -show_entries stream=codec_name,width,height \
-            -show_entries format=duration \
+          ffprobe -v error -show_entries stream=codec_name,width,height:format=duration \
             -of json mn-short-output-motion/MNShort_MOTION_es.mp4 \
             > mn-short-output-motion/ffprobe-es.json
           python - <<'PY'
