@@ -149,6 +149,21 @@ class MotionPilotTests(unittest.TestCase):
             self.assertIn("00:00:05,000 --> 00:00:11,000", lines)
         self.assertEqual(len(mux.LANGS), 10)
 
+    def test_fallback_voice_selection_keeps_language_and_primary_first(self):
+        from scripts.mn_short_motion import voices_for_locale
+        self.assertEqual(
+            voices_for_locale("ru-RU-DmitryNeural"),
+            ["ru-RU-DmitryNeural", "ru-RU-SvetlanaNeural"],
+        )
+        self.assertIn(
+            "ar-SA-ZariyahNeural",
+            voices_for_locale("ar-SA-HamedNeural"),
+        )
+        self.assertEqual(
+            voices_for_locale("es-ES-AlvaroNeural")[0],
+            "es-ES-AlvaroNeural",
+        )
+
     def test_canonical_narration_is_split_into_sentences(self):
         self.assertEqual(split_sentences("A factual statement. Another statement."), ["A factual statement.", "Another statement."])
 

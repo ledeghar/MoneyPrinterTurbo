@@ -356,46 +356,75 @@ def boundary_to_timing(part):
     return {"text": word, "start": round(start, 4), "end": round(start + duration, 4)}
 
 
-async def synthesize(text, voice, output):
-    """Generate ONE audio stream and REAL word-boundary timing metadata.
+VOICE_ALTERNATIVES = {
+    "es": ["es-ES-ElviraNeural"],
+    "en": ["en-GB-SoniaNeural"],
+    "fr": ["fr-FR-DeniseNeural"],
+    "de": ["de-DE-KatjaNeural"],
+    "it": ["it-IT-ElsaNeural"],
+    "pt": ["pt-PT-RaquelNeural"],
+    "ru": ["ru-RU-SvetlanaNeural"],
+    "zh": ["zh-CN-XiaoxiaoNeural"],
+    "ja": ["ja-JP-NanamiNeural"],
+    "ar": ["ar-SA-ZariyahNeural", "ar-EG-SalmaNeural"],
+}
 
-    Never estimate word timing from the number of letters or scene length.
-    Retrying regenerates both MP3 and timestamps together (no stale offsets).
+
+def voices_for_locale(primary):
+    locale = primary.split("-", 1)[0]
+    return list(dict.fromkeys([primary] + VOICE_ALTERNATIVES.get(locale, [])))
+
+
+async def synthesize(text, voice, output):
+    """Capture actual audio and WordBoundary metadata in the same request.
+
+    A neural voice may stop returning sound even while other locales work.
+    Try same-locale alternative voices; never fabricate timing or audio.
     """
     import edge_tts
 
     rendered = spoken_text(text, voice)
     locale = voice.split("-", 1)[0]
     output.parent.mkdir(parents=True, exist_ok=True)
-    for attempt in range(3):
-        marks = []
-        try:
-            speech = edge_tts.Communicate(
-                rendered, voice=voice, rate="-4%", volume="+12%",
-                boundary="WordBoundary",
-            )
-            with output.open("wb") as handle:
-                async for part in speech.stream():
-                    if part["type"] == "audio":
-                        handle.write(part["data"])
-                    elif part["type"] == "WordBoundary":
-                        timed = boundary_to_timing(part)
-                        if timed:
-                            marks.append(timed)
-            if output.stat().st_size <= 500:
-                raise RuntimeError("TTS returned empty audio")
-            if not marks:
-                raise RuntimeError("TTS did not provide word boundaries; refuse unsynchronized captions")
-            if any(marks[i]["start"] > marks[i + 1]["start"] for i in range(len(marks)-1)):
-                raise RuntimeError("TTS word-boundary timing is not monotonic")
-            return marks
-        except Exception as exc:
-            output.unlink(missing_ok=True)
-            if attempt == 2:
-                raise RuntimeError(
-                    "Word-synchronized TTS failed for " + locale + ": " + type(exc).__name__
-                ) from exc
-            await asyncio.sleep(2.0 + attempt * 3.0)
+    last_error = None
+    for candidate_voice in voices_for_locale(voice):
+        for attempt in range(3):
+            marks = []
+            try:
+                speech = edge_tts.Communicate(
+                    rendered, voice=candidate_voice, rate="-4%", volume="+12%",
+                    boundary="WordBoundary",
+                )
+                with output.open("wb") as handle:
+                    async for part in speech.stream():
+                        if part["type"] == "audio":
+                            handle.write(part["data"])
+                        elif part["type"] == "WordBoundary":
+                            timed = boundary_to_timing(part)
+                            if timed:
+                                marks.append(timed)
+                if output.stat().st_size <= 500:
+                    raise RuntimeError("TTS returned empty audio")
+                if not marks:
+                    raise RuntimeError("TTS returned no word boundaries")
+                if any(marks[i]["start"] > marks[i + 1]["start"] for i in range(len(marks) - 1)):
+                    raise RuntimeError("TTS word-boundary timing is not monotonic")
+                if candidate_voice != voice:
+                    print("Voice fallback used:", locale, candidate_voice)
+                # Gentle pacing reduces failures when requesting 80 utterances.
+                await asyncio.sleep(0.65)
+                return marks
+            except Exception as exc:
+                last_error = exc
+                output.unlink(missing_ok=True)
+                print("Voice service unavailable for", candidate_voice,
+                      "attempt", attempt + 1, type(exc).__name__)
+                await asyncio.sleep(2.5 + attempt * 3.5)
+    raise RuntimeError(
+        "Word-synchronized TTS failed for " + locale + " using "
+        + ", ".join(voices_for_locale(voice)) + "; last error: "
+        + type(last_error).__name__
+    ) from last_error
 
 
 VOICES = {
