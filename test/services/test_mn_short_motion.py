@@ -127,6 +127,27 @@ class MotionPilotTests(unittest.TestCase):
                 with self.assertRaisesRegex(RuntimeError, "EDITORIAL PHOTO REQUIRED"):
                     asyncio.run(motion.build(editorial, "demo", languages="es"))
 
+    def test_ten_audio_tracks_share_one_master_timeline_without_speed_changes(self):
+        from scripts import mn_short_multiaudio as mux
+        scenes = lambda durations: [
+            {"kind":"headline","audio":"audio/sample.mp3","text":"La noticia.",
+             "wordTimings":[{"text":"La","start":0.0,"end":0.1}],
+             "durationFrames":int(d)} for d in durations
+        ]
+        packs = {
+            lang: {"scenes": scenes([150,180] if lang == "de" else [120,170])}
+            for lang, _iso, _name in mux.LANGS
+        }
+        self.assertEqual(mux.master_durations(packs), [150,180])
+        self.assertEqual(mux.srt_clock(65.234), "00:01:05,234")
+        with tempfile.TemporaryDirectory() as tmp:
+            srt = Path(tmp) / "es.srt"
+            mux.create_srt(packs["es"], [150,180], srt)
+            lines = srt.read_text(encoding="utf-8-sig")
+            self.assertIn("00:00:00,000 --> 00:00:05,000", lines)
+            self.assertIn("00:00:05,000 --> 00:00:11,000", lines)
+        self.assertEqual(len(mux.LANGS), 10)
+
     def test_canonical_narration_is_split_into_sentences(self):
         self.assertEqual(split_sentences("A factual statement. Another statement."), ["A factual statement.", "Another statement."])
 
