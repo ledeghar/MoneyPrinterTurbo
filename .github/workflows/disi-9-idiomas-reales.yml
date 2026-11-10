@@ -1,0 +1,37 @@
+name: DISI V6 - narraciones reales 9 idiomas
+on:
+  push:
+    branches: [disi-video-v6-20261110]
+    paths: ['.github/workflows/disi-9-idiomas-reales.yml']
+  workflow_dispatch:
+jobs:
+  doblajes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+      - name: Instalar síntesis de voz neuronal
+        run: |
+          python -m pip install --quiet edge-tts mutagen
+      - name: Crear nueve narraciones distintas y tiempos por palabra
+        run: |
+          python mn-short-motion/demos/disi_v6/generate_voices.py
+      - name: Comprobar que los archivos contienen audio real
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(find dubs -name 'DISI_*.mp3' | wc -l)" -eq 9
+          python - <<'PY'
+          from pathlib import Path
+          from mutagen.mp3 import MP3
+          for p in sorted(Path("dubs").glob("DISI_*.mp3")):
+              duration=MP3(p).info.length
+              print(p.name, f"{duration:.2f} sec", p.stat().st_size)
+              assert duration>12 and p.stat().st_size>25000, p
+          PY
+      - name: Exportar doblajes y marcas temporales
+        uses: actions/upload-artifact@v4
+        with:
+          name: DISI-V6-neural-9-languages
+          path: dubs/
+          retention-days: 7
