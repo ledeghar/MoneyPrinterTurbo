@@ -19,6 +19,7 @@ on:
       - mn-short-motion/**
       - scripts/mn_short_motion.py
       - scripts/mn_short_motion_translate.py
+      - scripts/mn_short_multiaudio.py
       - test/services/test_mn_short_motion.py
 
 permissions:
@@ -45,7 +46,7 @@ jobs:
           python-version: '3.11'
       - name: Validate ten-language scripts and Python syntax
         run: |
-          python -m compileall -q scripts/mn_short_motion.py scripts/mn_short_motion_translate.py
+          python -m compileall -q scripts/mn_short_motion.py scripts/mn_short_motion_translate.py scripts/mn_short_multiaudio.py
           python -m unittest discover -s test/services -p test_mn_short_motion.py
       - name: Install voice synthesizer
         run: python -m pip install --disable-pip-version-check edge-tts==7.3.1
@@ -87,6 +88,60 @@ jobs:
           if-no-files-found: error
           retention-days: 3
           compression-level: 1
+
+
+  multilingual-master:
+    name: Multiplex one MP4 with ten selectable narrations and subtitles
+    needs: prepare
+    runs-on: ubuntu-latest
+    timeout-minutes: 100
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: MNShort-10-Language-Assets-${{ github.run_number }}
+          path: .
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Install FFmpeg and global font families
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends ffmpeg fonts-noto-core fonts-noto-cjk
+          fc-cache -f >/dev/null
+      - name: Calculate common visual scene timing from ten original-speed voices
+        run: python scripts/mn_short_multiaudio.py plan
+      - name: Install Remotion
+        working-directory: mn-short-motion
+        run: npm install --no-audit --no-fund
+      - name: Render one clean international picture master without baked subtitles
+        working-directory: mn-short-motion
+        run: |
+          npx remotion render src/index.jsx MNShortEditorial \
+            "../mn-short-output-motion/MNShort_MASTER_SILENT.mp4" \
+            --props=./props/master.json \
+            --codec=h264 \
+            --pixel-format=yuv420p \
+            --crf=21 \
+            --concurrency=2
+      - name: Mux ten selectable audio tracks and ten selectable subtitle tracks
+        run: python scripts/mn_short_multiaudio.py package
+      - name: Export video master and separate dubbing files for YouTube Studio
+        uses: actions/upload-artifact@v4
+        with:
+          name: MNShort-MASTER-10-AUDIO-10-SUBTITLES-${{ github.run_number }}
+          path: |
+            mn-short-output-motion/MNShort_MASTER_10_AUDIO_10_SUBTITLES.mp4
+            mn-short-output-motion/YT_DUB_*.m4a
+            mn-short-output-motion/SUBTITULOS_*.srt
+            mn-short-output-motion/multiaudio-plan.json
+          if-no-files-found: error
+          retention-days: 3
+          compression-level: 0
+
 
   render:
     name: Render ${{ matrix.language }} motion graphics at 1080x1920
@@ -143,5 +198,7 @@ jobs:
           compression-level: 0
           if-no-files-found: error
 
+# Bundled master has 10 selectable audio and 10 mov_text subtitle streams.
+# For YouTube Studio multilingual audio, upload audio-only tracks via Languages > Dub.
 # No YouTube, TikTok, Instagram or Facebook upload is performed by this workflow.
 # Live mode requires GEMINI_API_KEY; demo mode uses explanatory demo copy.
