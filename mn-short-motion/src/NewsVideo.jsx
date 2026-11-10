@@ -9,6 +9,8 @@ const WHITE = "#f5faff";
 const RED = "#f0405c";
 const MUTED = "#b6c9db";
 const BLUE = "#468fd4";
+const PRODUCT_NAME = "MNShort";
+const EDITORIAL_SIGNATURE = "Media News by DISI";
 const LANG_LABELS = {
   es:{person:"PROTAGONISTA",noPhoto:"Sin retrato autorizado disponible",metric:"CIFRA DE LA NOTICIA",place:"DIAGRAMA DE CONTEXTO, NO MAPA REAL",source:"FUENTE ORIGINAL",sourceText:"Enlace original en el informe editorial",outro:"Contexto. Fuentes. Hechos.",context:"CLAVES DE LA NOTICIA"},
   en:{person:"NAMED PERSON",noPhoto:"No cleared portrait available",metric:"NUMBER IN THE STORY",place:"CONTEXT DIAGRAM, NOT A REAL MAP",source:"ORIGINAL SOURCE",sourceText:"Article link in editorial report",outro:"Context. Sources. Facts.",context:"IN CONTEXT"},
@@ -26,9 +28,9 @@ const font = (lang) => lang==="ar" ? "'Noto Sans Arabic', 'Noto Sans', Arial, sa
 
 
 function Nameplate() {
-  return <div style={{display:"flex",alignItems:"center",gap:18}}>
+  return <div aria-label={PRODUCT_NAME} style={{display:"flex",alignItems:"center",gap:9,direction:"ltr",whiteSpace:"nowrap"}}>
     <span style={{fontSize:42,fontWeight:900,background:RED,padding:"9px 16px",borderRadius:8,letterSpacing:-3}}>MN</span>
-    <span style={{fontSize:37,fontWeight:900,letterSpacing:8}}>SHORT</span>
+    <span style={{fontSize:39,fontWeight:900,letterSpacing:-1}}>Short</span>
   </div>;
 }
 
@@ -88,8 +90,10 @@ function Display({item,frame,fps}){
     <div style={{fontSize:29,color:MUTED}}>{label(item.language,"sourceText")}</div>
   </div>;
   if(item.kind==="outro") return <div style={{...box,...appear,display:"flex",flexDirection:"column",justifyContent:"center",alignItems:"center",gap:40}}>
-    <div style={{fontSize:140,fontWeight:900,color:RED,letterSpacing:-7}}>MN</div>
-    <div style={{fontSize:85,fontWeight:900,letterSpacing:8}}>SHORT</div>
+    <div aria-label={PRODUCT_NAME} style={{display:"flex",alignItems:"baseline",direction:"ltr",fontSize:115,fontWeight:900,letterSpacing:-5,whiteSpace:"nowrap"}}>
+      <span style={{color:RED}}>MN</span><span>Short</span>
+    </div>
+    <div style={{fontSize:30,fontWeight:750,letterSpacing:1,color:MUTED,direction:"ltr"}}>{EDITORIAL_SIGNATURE}</div>
     <div style={{height:6,width:460,background:BLUE}}/>
     <div style={{fontSize:31,color:MUTED}}>{label(item.language,"outro")}</div>
   </div>;
@@ -117,8 +121,8 @@ function Segment({item,index,count,publisher,duration}){
     <div style={{minHeight:350,display:"flex",alignItems:"center",padding:"20px 5px 30px"}}><VoiceCaption text={item.text} frame={frame} duration={duration} lang={item.language}/></div>
     <div style={{height:2,background:"#38556b",marginBottom:22}}/>
     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:12}}>
-      <div style={{fontSize:21,fontWeight:800,color:MUTED}}>MEDIA NEWS · {String(publisher||"").slice(0,45)}</div>
-      <div style={{fontSize:22,fontWeight:900,color:RED}}>MN SHORT</div>
+      <div style={{fontSize:23,fontWeight:800,color:MUTED,direction:"ltr",whiteSpace:"nowrap"}}>{EDITORIAL_SIGNATURE}</div>
+      <div style={{fontSize:23,fontWeight:900,color:RED,direction:"ltr",whiteSpace:"nowrap"}}>{PRODUCT_NAME}</div>
     </div>
   </AbsoluteFill>;
 }
