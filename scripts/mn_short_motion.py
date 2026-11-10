@@ -285,10 +285,18 @@ VOICES = {
 }
 
 
-async def build(editorial, mode):
+async def build(editorial, mode, languages="all"):
     generated, source = editorial["generated"], editorial["source"]
+    if languages not in {"all", "es"}:
+        raise ValueError("Only 'all' or 'es' render profiles are supported")
+    selected_languages = list(VOICES) if languages == "all" else ["es"]
     if mode == "demo":
-        translations = json.loads((MOTION / "demo_translations.json").read_text(encoding="utf-8"))
+        all_demo = json.loads((MOTION / "demo_translations.json").read_text(encoding="utf-8"))
+        translations = {lang: all_demo[lang] for lang in selected_languages}
+    elif languages == "es":
+        # One real Spanish news story must not trigger translation of nine
+        # additional languages or generation of nine unused audio tracks.
+        translations = {"es": split_sentences(generated["script_es"])}
     else:
         translations_path = ROOT / "mn_short_motion_translations.json"
         if not translations_path.is_file():
@@ -300,8 +308,8 @@ async def build(editorial, mode):
     original = translations.get("es") or []
     if not isinstance(original, list) or not (3 <= len(original) <= 18):
         raise RuntimeError("Canonical Spanish story has unexpected scene count")
-    if set(translations) != set(VOICES):
-        raise RuntimeError("Missing languages: " + repr(set(VOICES) - set(translations)))
+    if set(translations) != set(selected_languages):
+        raise RuntimeError("Missing requested languages: " + repr(set(selected_languages) - set(translations)))
     for lang, segments in translations.items():
         if not isinstance(segments, list) or len(segments) != len(original):
             raise RuntimeError("Screen-to-screen translation mismatch: " + lang)
@@ -338,7 +346,8 @@ async def build(editorial, mode):
             item["credit"] = photo_cache[person]["credit"]
 
     durations = {}
-    for lang, voice in VOICES.items():
+    for lang in selected_languages:
+        voice = VOICES[lang]
         sentences = translations[lang]
         cursor = 0
         scenes = []
@@ -384,7 +393,7 @@ async def build(editorial, mode):
         "durations_seconds": durations,
         "photo_candidates_selected": credits,
         "photo_selection_notice": "Commons license and title checks do not prove subject identity; inspect all chosen photos and rights before publication.",
-        "languages": list(VOICES),
+        "languages": selected_languages,
         "autopublish": False,
         "created_utc": datetime.now(timezone.utc).isoformat(),
     }
@@ -392,11 +401,11 @@ async def build(editorial, mode):
         json.dumps(metadata, ensure_ascii=False, indent=2), encoding="utf-8"
     )
     (OUTPUT / "LEEME.txt").write_text(
-        "\ufeffMN SHORT — MOTOR REMOTION EN 10 IDIOMAS\n"
+        "\ufeffMNShort — MOTOR REMOTION\n"
         + "Prueba: " + mode.upper() + "\n"
         + "Fuente: " + str(source.get("url") or "") + "\n"
-        + "Diez vídeos verticales generados a partir del MISMO guion y storyboard.\n"
-        + "Archivos por idioma: " + ", ".join("MNShort_MOTION_" + x.upper() + ".mp4" for x in VOICES) + "\n"
+        + "Idiomas solicitados: " + ", ".join(selected_languages) + "\n"
+        + "MP4 para revisión: " + ", ".join("MNShort_MOTION_" + x.upper() + ".mp4" for x in selected_languages) + "\n"
         + "Solo para revisión: NO se publica automáticamente.\n"
         + "Las fotografías de Commons requieren verificar identidad, derechos y atribución.\n"
         + "Los diagramas de contexto NO son mapas geográficos.\n",
@@ -407,6 +416,8 @@ async def build(editorial, mode):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--mode", choices=("demo", "live"), default="demo")
+    parser.add_argument("--languages", choices=("all", "es"), default="all",
+                        help="All ten languages, or a single Spanish review clip")
     args = parser.parse_args()
     if not shutil.which("ffprobe"):
         raise SystemExit("ffprobe is required for synchronized audio scenes")
@@ -417,7 +428,7 @@ def main():
         if not source_json.is_file():
             raise SystemExit("Missing MN Short RSS/Gemini editorial manifest. Run mn_short_cloud.py prepare first.")
         editorial = json.loads(source_json.read_text(encoding="utf-8"))
-    asyncio.run(build(editorial, args.mode))
+    asyncio.run(build(editorial, args.mode, languages=args.languages))
 
 
 if __name__ == "__main__":
