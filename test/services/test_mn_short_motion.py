@@ -1,6 +1,10 @@
 """Offline invariants of the ten-language motion-graphics compositor."""
+import asyncio
 import json
+import tempfile
 import unittest
+from pathlib import Path
+from unittest.mock import patch
 from pathlib import Path
 
 from scripts.mn_short_motion import MOTION, VOICES, cue, named, split_sentences
@@ -38,6 +42,50 @@ class MotionPilotTests(unittest.TestCase):
         portrait = cue(original[1], 1, len(original), source, [], set(), demo=True)
         self.assertEqual(portrait["person"], "Jensen Huang")
         self.assertNotIn("image", portrait)
+
+    def test_live_spanish_only_skips_nine_translations_and_tracks(self):
+        from scripts import mn_short_motion as motion
+        editorial = {
+            "source": {
+                "title": "Investigación tecnológica",
+                "description": "La fuente describe una investigación tecnológica.",
+                "publisher": "Ejemplo",
+                "url": "https://example.org/report",
+            },
+            "generated": {
+                "title_es": "Investigación tecnológica",
+                "script_es": (
+                    "La investigación aparece en una fuente publicada. "
+                    "El informe describe sus resultados principales. "
+                    "Todavía es necesario contrastar los datos."
+                ),
+                "visual_subjects": [],
+            },
+        }
+
+        async def fake_voice(_text, _voice, path):
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(b"fake audio for offline test")
+
+        with tempfile.TemporaryDirectory() as temp:
+            base = Path(temp)
+            with patch.object(motion, "PUBLIC", base / "public"), \
+                    patch.object(motion, "PROPS", base / "props"), \
+                    patch.object(motion, "OUTPUT", base / "output"), \
+                    patch.object(motion, "synthesize", fake_voice), \
+                    patch.object(motion, "voice_duration", return_value=1.5):
+                asyncio.run(motion.build(editorial, "live", languages="es"))
+                self.assertEqual(
+                    sorted(p.name for p in motion.PROPS.glob("*.json")), ["es.json"]
+                )
+                contents = json.loads((motion.PROPS / "es.json").read_text(encoding="utf-8"))
+                self.assertEqual(contents["language"], "es")
+                self.assertEqual(len(contents["scenes"]), 3)
+                metadata = json.loads(
+                    (motion.OUTPUT / "editorial-y-creditos.json").read_text(encoding="utf-8")
+                )
+                self.assertEqual(metadata["languages"], ["es"])
+                self.assertEqual(set(metadata["aligned_translations"]), {"es"})
 
     def test_canonical_narration_is_split_into_sentences(self):
         self.assertEqual(split_sentences("A factual statement. Another statement."), ["A factual statement.", "Another statement."])
