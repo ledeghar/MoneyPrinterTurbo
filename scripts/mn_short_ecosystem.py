@@ -202,7 +202,7 @@ def choose_story(topic: str, ledger: dict, trend_query: str = "") -> dict:
         for item in candidates:
             haystack = (item["title"]+" "+item["description"]).lower()
             terms = {w for w in re.findall(r"[a-z]{3,}", haystack) if w not in stop}
-            if re.search(r"\\bAI\\b", haystack, re.I):
+            if re.search(r"\bai\b", haystack, re.I):
                 terms.add("ai")
             score = len(topic_words.intersection(terms))
             if score:
