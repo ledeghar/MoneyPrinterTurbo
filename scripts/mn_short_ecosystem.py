@@ -170,7 +170,7 @@ def parse_feed(xml_bytes: bytes, publisher: str, category: str) -> list[dict]:
     return result
 
 
-def choose_story(topic: str, ledger: dict) -> dict:
+def choose_story(topic: str, ledger: dict, trend_query: str = "") -> dict:
     feeds = config()["feeds"][topic]
     seen_ids, seen_titles = existing_keys(ledger)
     candidates = []
@@ -188,7 +188,31 @@ def choose_story(topic: str, ledger: dict) -> dict:
             f"No fresh, distinct and adequately described {topic!r} article available; "
             f"refusing generic/mislabeled output. Unavailable feeds: {problems}"
         )
-    # Prefer fresh substantiated material, not simply first response from an RSS URL.
+    # For weekly trending mode, a broad category is not enough: the source
+    # story must meaningfully match the actual micro-niche query from YouTube.
+    if trend_query:
+        stop = {"news","short","shorts","video","videos","explained","trending",
+                "update","breaking","latest","today","recent","world","industry",
+                "popular","views","video","new","current","the","and","for"}
+        topic_words = {w for w in re.findall(r"[a-z]{3,}", trend_query.lower())
+                       if w not in stop}
+        if "ai" in trend_query.lower().split():
+            topic_words.add("ai")
+        ranked = []
+        for item in candidates:
+            haystack = (item["title"]+" "+item["description"]).lower()
+            terms = {w for w in re.findall(r"[a-z]{3,}", haystack) if w not in stop}
+            if re.search(r"\\bAI\\b", haystack, re.I):
+                terms.add("ai")
+            score = len(topic_words.intersection(terms))
+            if score:
+                ranked.append((score,item))
+        if not ranked:
+            raise RuntimeError("No verified RSS story matches the YouTube micro-niche "
+                               +repr(trend_query)+"; refuse unrelated news")
+        ranked.sort(key=lambda x:(x[0],datetime.fromisoformat(x[1]["published_utc"])),reverse=True)
+        return ranked[0][1]
+    # Legacy/manual mode keeps its original editorial selection.
     candidates.sort(
         key=lambda x: (datetime.fromisoformat(x["published_utc"]), len(x["description"])),
         reverse=True,
@@ -196,9 +220,9 @@ def choose_story(topic: str, ledger: dict) -> dict:
     return candidates[0]
 
 
-def prepare(slot: str, topic: str) -> None:
+def prepare(slot: str, topic: str, trend: dict | None = None) -> None:
     ledger = read_history()
-    source = choose_story(topic, ledger)
+    source = choose_story(topic, ledger, (trend or {}).get('chosen', {}).get('niche_query', ''))
     scripts = generate_scripts(source)
     # Reuse the same narration + cloud renderer as the successful ES/EN pilot.
     one_task = {
@@ -236,6 +260,9 @@ def prepare(slot: str, topic: str) -> None:
             "count": 1,
         },
     }
+    if trend:
+        editorial["weekly_trend"] = trend["chosen"]
+        editorial["weekly_trend_checked_at_utc"] = trend["checked_at_utc"]
     EDITORIAL_PATH.write_text(json.dumps(editorial, ensure_ascii=False, indent=2), encoding="utf-8")
     print(f"MN SHORT [{slot}] [{topic}]: {source['publisher']} — {source['title']}")
     print("Exactly ONE Spanish video task prepared; publication remains independently gated.")
@@ -310,11 +337,21 @@ def main():
     prep = sub.add_parser("prepare")
     prep.add_argument("--slot", default="")
     prep.add_argument("--cron", default="")
+    prep.add_argument("--topic-file", default="", help="Verified YouTube weekly niche report")
     sub.add_parser("package")
     args = parser.parse_args()
     if args.command == "prepare":
         slot = resolved_slot(args.slot, args.cron)
-        prepare(slot, resolved_topic(slot))
+        trend = None
+        topic = resolved_topic(slot)
+        if args.topic_file:
+            trend = json.loads(Path(args.topic_file).read_text(encoding="utf-8"))
+            if trend.get("status") != "qualified":
+                raise RuntimeError("No qualified weekly niche: abort editorial creation")
+            topic = trend["chosen"]["topic"]
+            if topic not in config()["feeds"]:
+                raise RuntimeError("Selected trend has no verified RSS newsroom feeds")
+        prepare(slot, topic, trend)
     elif args.command == "package":
         package()
 
