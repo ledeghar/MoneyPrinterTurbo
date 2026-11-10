@@ -1,0 +1,51 @@
+name: DISI V9 - QA plantilla sin publicacion
+on:
+  push:
+    branches: [main, disi-v9-production-template-20261110]
+    paths:
+      - .github/workflows/disi-v9-template-qa.yml
+      - scripts/mnshort_v9_template.py
+      - test/services/test_mnshort_v9_template.py
+      - mn-short-motion/src/DisiV9.jsx
+      - mn-short-motion/src/index.jsx
+      - mn-short-motion/templates/disi-v9/**
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validation:
+    name: Control audio/idiomas/duracion y Remotion
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Python V9 quality and code tests
+        run: |
+          python -m py_compile scripts/mnshort_v9_template.py
+          python -m unittest discover -s test/services -p 'test_mnshort_v9_template.py' -v
+      - name: Check FFmpeg and FFprobe availability
+        run: |
+          if ! command -v ffprobe >/dev/null; then
+            sudo apt-get update -qq
+            sudo apt-get install -y --no-install-recommends ffmpeg
+          fi
+          ffprobe -version | head -n 1
+      - name: Install Remotion
+        working-directory: mn-short-motion
+        run: npm install --no-audit --no-fund
+      - name: Check V9 approved Remotion composition
+        working-directory: mn-short-motion
+        run: |
+          npx remotion compositions src/index.jsx > /tmp/disi-compositions.txt
+          cat /tmp/disi-compositions.txt
+          grep -q 'DISIV9Approved' /tmp/disi-compositions.txt
+      - name: Confirm no publication
+        run: echo 'V9 QA finished; this workflow cannot publish to social networks.'
