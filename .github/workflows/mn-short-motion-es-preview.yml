@@ -1,0 +1,118 @@
+name: MNShort - One Spanish Remotion preview (review only)
+
+# Safe and cost-conscious production check: one real story, one language,
+# one 1080x1920 MP4. No scheduled runs or social network publication.
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'Use live for one current RSS/Gemini story, demo for a no-key sample'
+        type: choice
+        required: true
+        default: live
+        options:
+          - live
+          - demo
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mnshort-spanish-preview
+  cancel-in-progress: false
+
+jobs:
+  prepare-and-render-es:
+    name: Build and render one Spanish MNShort for editorial review
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      MOTION_MODE: ${{ inputs.mode }}
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      GEMINI_MODEL: gemini-3.5-flash-lite
+      PYTHONUNBUFFERED: '1'
+    steps:
+      - name: Checkout source without push access
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Validate brand and single-Spanish logic offline
+        run: |
+          python -m compileall -q scripts/mn_short_motion.py scripts/mn_short_cloud.py
+          python -m unittest discover -s test/services -p test_mn_short_motion.py -v
+      - name: Check live credential before news selection
+        if: ${{ inputs.mode == 'live' }}
+        run: |
+          if [ -z "$GEMINI_API_KEY" ]; then
+            echo "Missing GEMINI_API_KEY; no news generation attempted" >&2
+            exit 1
+          fi
+      - name: Install audio and video tooling
+        run: |
+          python -m pip install --disable-pip-version-check edge-tts==7.3.1
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends ffmpeg fonts-noto-core fonts-noto-cjk
+          fc-cache -f >/dev/null
+      - name: Select one sourced current RSS story and generate Spanish narration
+        if: ${{ inputs.mode == 'live' }}
+        run: python scripts/mn_short_cloud.py prepare
+      - name: Generate only Spanish audio and visual storyboard
+        run: python scripts/mn_short_motion.py --mode "$MOTION_MODE" --languages es
+      - name: Confirm only one language generated
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          meta=json.loads(Path("mn-short-output-motion/editorial-y-creditos.json").read_text(encoding="utf-8"))
+          assert meta["languages"] == ["es"]
+          assert meta["autopublish"] is False
+          assert set(p.stem for p in Path("mn-short-motion/props").glob("*.json")) == {"es"}
+          print("One Spanish review script, no translations, no publication")
+          PY
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install Remotion compositor
+        working-directory: mn-short-motion
+        run: npm install --no-audit --no-fund
+      - name: Render one vertical MP4 with MNShort / DISI branding
+        working-directory: mn-short-motion
+        run: |
+          npx remotion render src/index.jsx MNShortEditorial \
+            ../mn-short-output-motion/MNShort_MOTION_es.mp4 \
+            --props=./props/es.json \
+            --codec=h264 --pixel-format=yuv420p --crf=21 --concurrency=2
+      - name: Inspect technical render metadata
+        run: |
+          test -s mn-short-output-motion/MNShort_MOTION_es.mp4
+          ffprobe -v error -show_entries stream=codec_name,width,height \
+            -show_entries format=duration \
+            -of json mn-short-output-motion/MNShort_MOTION_es.mp4 \
+            > mn-short-output-motion/ffprobe-es.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          data=json.loads(Path("mn-short-output-motion/ffprobe-es.json").read_text())
+          assert any(s.get("width")==1080 and s.get("height")==1920 and s.get("codec_name")=="h264" for s in data["streams"])
+          assert float(data["format"]["duration"]) > 2
+          print("1080x1920 H.264 MP4 validated")
+          PY
+      - name: Save video, attribution and editorial report (no upload)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: MNShort-Preview-ES-${{ github.run_number }}
+          path: |
+            mn-short-output-motion/
+            mn-short-motion/props/es.json
+          retention-days: 7
+          compression-level: 0
+          if-no-files-found: warn
+
+# This review workflow NEVER publishes to YouTube, TikTok, Instagram or Facebook.
+# The news/images must be independently checked before public release.
