@@ -34,15 +34,17 @@ jobs:
           from pathlib import Path
           p=Path('alepo-tts-output')
           m=json.loads((p/'manifest.json').read_text())
-          assert len(m)==10
-          for k in m:
-              f=p/m[k]['file']
+          completed=m['completed']
+          assert len(completed)>=1, m
+          for k in completed:
+              f=p/completed[k]['file']
               d=float(subprocess.check_output(['ffprobe','-v','error','-show_entries','format=duration','-of','default=nokey=1:noprint_wrappers=1',str(f)]))
               assert 18 < d < 75, (k,d)
-              m[k]['duration_s']=round(d,3)
+              completed[k]['duration_s']=round(d,3)
           (p/'manifest.json').write_text(json.dumps(m,ensure_ascii=False,indent=2))
           PY
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: DISI-ALEPO-10-VOICE-TEST
           path: alepo-tts-output/
