@@ -29,7 +29,16 @@ async def go():
         # Fixed configuration for repeatable renders.
         path = out / f"ALEPO_{code}.mp3"
         print(code, voice, flush=True)
-        await edge_tts.Communicate(text=text, voice=voice, rate="+8%").save(str(path))
+        try:
+            await edge_tts.Communicate(text=text, voice=voice, rate="+8%").save(str(path))
+        except Exception as exc:
+            print("VOICE_FAILURE", code, voice, repr(exc), flush=True)
+            if code == "es":
+                voice = "es-ES-AlvaroNeural"
+                print("DIAGNOSTIC_FALLBACK", voice, flush=True)
+                await edge_tts.Communicate(text=text, voice=voice, rate="+8%").save(str(path))
+            else:
+                raise
         if path.stat().st_size < 1000:
             raise RuntimeError("Empty TTS: " + code)
         results[code] = {"voice":voice, "text":text,"file":path.name,"bytes":path.stat().st_size}
