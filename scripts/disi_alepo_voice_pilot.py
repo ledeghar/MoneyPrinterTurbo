@@ -25,25 +25,39 @@ async def go():
     out = Path("alepo-tts-output")
     out.mkdir(exist_ok=True)
     results = {}
+    errors = {}
     for code, (voice, text) in DATA.items():
-        # Fixed configuration for repeatable renders.
         path = out / f"ALEPO_{code}.mp3"
-        print(code, voice, flush=True)
-        try:
-            await edge_tts.Communicate(text=text, voice=voice, rate="+8%").save(str(path))
-        except Exception as exc:
-            print("VOICE_FAILURE", code, voice, repr(exc), flush=True)
-            if code == "es":
-                voice = "es-ES-AlvaroNeural"
-                print("DIAGNOSTIC_FALLBACK", voice, flush=True)
-                await edge_tts.Communicate(text=text, voice=voice, rate="+8%").save(str(path))
-            else:
-                raise
-        if path.stat().st_size < 1000:
-            raise RuntimeError("Empty TTS: " + code)
-        results[code] = {"voice":voice, "text":text,"file":path.name,"bytes":path.stat().st_size}
-    (out/"manifest.json").write_text(json.dumps(results,ensure_ascii=False,indent=2),encoding="utf8")
-    print("VOICE_GENERATION_COMPLETED: 10 languages", flush=True)
+        options = [voice]
+        if code == "es":
+            options.append("es-ES-AlvaroNeural")
+        elif code == "ru":
+            options.extend(["ru-RU-SvetlanaNeural", "ru-RU-DariyaNeural"])
+        for candidate in options:
+            print("TRY", code, candidate, flush=True)
+            try:
+                await edge_tts.Communicate(text=text, voice=candidate, rate="+8%").save(str(path))
+                if path.stat().st_size < 1000:
+                    raise RuntimeError("Empty TTS")
+                results[code] = {"voice":candidate, "text":text,
+                                 "file":path.name, "bytes":path.stat().st_size,
+                                 "pelayo_requested": code == "es",
+                                 "pelayo_delivered": candidate == "es-MX-PelayoNeural"}
+                break
+            except Exception as exc:
+                errors[f"{code}:{candidate}"] = str(exc)
+                if path.exists():
+                    path.unlink()
+        if code not in results:
+            print("UNAVAILABLE", code, flush=True)
+    (out/"manifest.json").write_text(json.dumps(
+        {"completed":results,"failed_attempts":errors,
+         "complete_ten_tracks":len(results)==10,
+         "pelayo_original":results.get("es",{}).get("pelayo_delivered",False)},
+        ensure_ascii=False,indent=2),encoding="utf8")
+    print("VOICE_GENERATION_COMPLETED:", len(results), "of 10", flush=True)
+    if len(results) < 1:
+        raise RuntimeError("TTS service unavailable")
 
 if __name__=="__main__":
     asyncio.run(go())
