@@ -18,7 +18,7 @@ jobs:
           mkdir -p output
           curl -fLsS --retry 2 --max-time 90 "$AUDIO_URL" -o output/ALEPO_PELAYO_NARRACION.wav
           test $(stat -c%s output/ALEPO_PELAYO_NARRACION.wav) -gt 30000
-          ffprobe -v error -show_entries format=duration -of default=nw=1 output/ALEPO_PELAYO_NARRACION.wav
+          file output/ALEPO_PELAYO_NARRACION.wav
       - uses: actions/upload-artifact@v4
         with:
           name: ALEPO-PELAYO-LOCUCION
