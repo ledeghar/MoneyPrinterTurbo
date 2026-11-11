@@ -49,6 +49,10 @@ jobs:
         run: |
           mkdir -p ../disi-free-lab
           npx remotion render src/lab-index.jsx DISIFreeMotionLab ../disi-free-lab/DISI_Motion_Lab_REVIEW.mp4 --codec=h264 --pixel-format=yuv420p --crf=21 --concurrency=2
+      - name: Install ffprobe for validation
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg
       - name: Verify video output
         run: |
           ffprobe -v error -show_entries stream=codec_name,width,height:format=duration -of json disi-free-lab/DISI_Motion_Lab_REVIEW.mp4 > disi-free-lab/ffprobe.json
