@@ -1,0 +1,59 @@
+name: DISI Books - Zero-cost marketing drafts (NO PUBLISH)
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'disi-book-marketing/**'
+      - 'tests/test_disi_book_marketing.py'
+      - '.github/workflows/disi-book-marketing.yml'
+  schedule:
+    - cron: '15 7 * * 1'  # Monday 07:15 UTC, draft generation only
+
+permissions:
+  contents: read
+
+concurrency:
+  group: disi-book-marketing
+  cancel-in-progress: true
+
+jobs:
+  draft-and-preview:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Validate catalog, channels and publication restrictions
+        run: python -m unittest discover -s tests -p test_disi_book_marketing.py -v
+      - name: Generate sales landing + 28-day campaign copy (offline)
+        run: |
+          python disi-book-marketing/marketing.py \
+            --site-dir disi-book-marketing/output/site \
+            --campaign-dir disi-book-marketing/output/campaigns
+      - name: Verify results contain 28 unpublished drafts
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          folder=Path("disi-book-marketing/output")
+          plan=json.loads((folder/"campaigns"/"campaigns.json").read_text(encoding="utf8"))
+          assert plan["total_drafts"]==28
+          assert plan["autopublish"] is False
+          assert all(post["publication_enabled"] is False for post in plan["posts"])
+          assert (folder/"site"/"index.html").is_file()
+          assert (folder/"site"/"styles.css").is_file()
+          print("28 editorial drafts and static landing validated; nothing published")
+          PY
+      - name: Save output for editorial review (30 days)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: DISI-Book-Marketing-Drafts
+          path: disi-book-marketing/output/
+          retention-days: 30
+          if-no-files-found: warn
+
+# Read-only GitHub Actions job. NO deploy, NO outbound publication, NO API keys.
