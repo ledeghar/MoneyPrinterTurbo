@@ -1,0 +1,70 @@
+name: DISI Free Motion Lab - review only
+on:
+  workflow_dispatch:
+    inputs:
+      fetch_public_signals:
+        description: 'Check NASA EONET and USGS (read-only)'
+        type: boolean
+        default: false
+  pull_request:
+    paths:
+      - 'mn-short-motion/src/DisiMotionLab.jsx'
+      - 'mn-short-motion/src/lab-index.jsx'
+      - 'scripts/disi_public_signals.py'
+      - 'tests/test_disi_public_signals.py'
+      - '.github/workflows/disi-free-motion-lab.yml'
+  push:
+    branches:
+      - 'disi/free-video-motion-lab-*'
+permissions:
+  contents: read
+concurrency:
+  group: disi-free-motion-lab
+  cancel-in-progress: true
+jobs:
+  preview:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Offline safety and feed tests
+        run: python -m unittest discover -s tests -p test_disi_public_signals.py -v
+      - name: Produce source report (offline unless explicitly opted in)
+        env:
+          LIVE: ${{ inputs.fetch_public_signals }}
+        run: |
+          if [ "$LIVE" = "true" ]; then
+            python scripts/disi_public_signals.py --live --output disi-free-lab/signals.json
+          else
+            python scripts/disi_public_signals.py --output disi-free-lab/signals.json
+          fi
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install Remotion compositor
+        working-directory: mn-short-motion
+        run: npm install --no-audit --no-fund
+      - name: Render 12s 1080x1920 H264 proof
+        working-directory: mn-short-motion
+        run: |
+          mkdir -p ../disi-free-lab
+          npx remotion render src/lab-index.jsx DISIFreeMotionLab ../disi-free-lab/DISI_Motion_Lab_REVIEW.mp4 --codec=h264 --pixel-format=yuv420p --crf=21 --concurrency=2
+      - name: Verify video output
+        run: |
+          ffprobe -v error -show_entries stream=codec_name,width,height:format=duration -of json disi-free-lab/DISI_Motion_Lab_REVIEW.mp4 > disi-free-lab/ffprobe.json
+          python - <<'PY'
+          import json
+          j=json.load(open("disi-free-lab/ffprobe.json"))
+          assert any(s.get("codec_name")=="h264" and s.get("width")==1080 and s.get("height")==1920 for s in j["streams"])
+          assert 11.9<=float(j["format"]["duration"])<=12.1
+          print("DISI LAB verified, NOT PUBLISHED")
+          PY
+      - name: Save preview artefacts for seven days
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: DISI-Free-Motion-Lab
+          path: disi-free-lab/
+          retention-days: 7
+          if-no-files-found: warn
+# No scheduled runs, no social API, no paid API, no publication, no V9 change.
