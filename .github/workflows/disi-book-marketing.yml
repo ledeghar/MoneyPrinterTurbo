@@ -6,6 +6,7 @@ on:
     paths:
       - 'disi-book-marketing/**'
       - 'tests/test_disi_book_marketing.py'
+      - 'tests/test_disi_book_acquisition.py'
       - '.github/workflows/disi-book-marketing.yml'
   schedule:
     - cron: '15 7 * * 1'  # Monday 07:15 UTC, draft generation only
@@ -27,12 +28,16 @@ jobs:
         with:
           python-version: '3.11'
       - name: Validate catalog, channels and publication restrictions
-        run: python -m unittest discover -s tests -p test_disi_book_marketing.py -v
+        run: |
+          python -m unittest discover -s tests -p test_disi_book_marketing.py -v
+          python -m unittest discover -s tests -p test_disi_book_acquisition.py -v
       - name: Generate sales landing + 28-day campaign copy (offline)
         run: |
           python disi-book-marketing/marketing.py \
             --site-dir disi-book-marketing/output/site \
             --campaign-dir disi-book-marketing/output/campaigns
+      - name: Generate targeted buyer acquisition research (never send)
+        run: python disi-book-marketing/acquisition/acquisition.py --output disi-book-marketing/output/acquisition
       - name: Verify results contain 28 unpublished drafts
         run: |
           python - <<'PY'
@@ -45,6 +50,10 @@ jobs:
           assert all(post["publication_enabled"] is False for post in plan["posts"])
           assert (folder/"site"/"index.html").is_file()
           assert (folder/"site"/"styles.css").is_file()
+          leads=json.loads((folder/"acquisition"/"summary.json").read_text(encoding="utf8"))
+          assert leads["qualified_public_channels"]>=8
+          assert leads["messages_sent"]==0
+          assert leads["sales_attributed"] is None
           print("28 editorial drafts and static landing validated; nothing published")
           PY
       - name: Save output for editorial review (30 days)
