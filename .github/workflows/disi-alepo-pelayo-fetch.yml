@@ -1,0 +1,27 @@
+name: DISI ALEPO - recuperar narracion Pelayo
+on:
+  pull_request:
+    paths:
+      - .github/workflows/disi-alepo-pelayo-fetch.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  pelayo:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Retrieve generated Spanish Pelayo narration
+        env:
+          AUDIO_URL: "https://resource2.heygen.ai/text_to_speech/e4ed5b93dd4c40e880e82912fdd31ed2/40ded5e9651a43a58b77f72699b95688/id=a8333eecb8e84a89ac80fc95ed267188.wav"
+        run: |
+          mkdir -p output
+          curl -fLsS --retry 2 --max-time 90 "$AUDIO_URL" -o output/ALEPO_PELAYO_NARRACION.wav
+          test $(stat -c%s output/ALEPO_PELAYO_NARRACION.wav) -gt 30000
+          ffprobe -v error -show_entries format=duration -of default=nw=1 output/ALEPO_PELAYO_NARRACION.wav
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ALEPO-PELAYO-LOCUCION
+          path: output/ALEPO_PELAYO_NARRACION.wav
+          if-no-files-found: error
+          retention-days: 2
