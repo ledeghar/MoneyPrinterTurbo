@@ -5,6 +5,10 @@ on:
     paths:
       - scripts/disi_alepo_voice_pilot.py
       - .github/workflows/disi-alepo-tts-review.yml
+  pull_request:
+    paths:
+      - scripts/disi_alepo_voice_pilot.py
+      - .github/workflows/disi-alepo-tts-review.yml
   workflow_dispatch:
 permissions:
   contents: read
