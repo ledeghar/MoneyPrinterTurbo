@@ -1,0 +1,46 @@
+name: DISI Reels Intake - prueba aislada sin publicacion
+on:
+  pull_request:
+    paths:
+      - 'scripts/disi_reels_intake.py'
+      - 'tests/test_disi_reels_intake.py'
+      - 'docs/disi-reels-intake/**'
+      - '.github/workflows/disi-reels-intake-smoke.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  offline-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Testar contrato de fuentes y publicacion bloqueada
+        run: python -m unittest discover -s tests -p 'test_disi_reels_intake.py' -v
+      - name: Instalar sólo Pillow y FFmpeg (sin generadores ni credenciales)
+        run: |
+          python -m pip install pillow
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends ffmpeg espeak
+      - name: Crear storyboard y vista previa no publicable
+        run: |
+          mkdir -p disi-intake-smoke
+          python scripts/disi_reels_intake.py plan --brief docs/disi-reels-intake/brief.example.json --output disi-intake-smoke/storyboard.json
+          python scripts/disi_reels_intake.py demo --output disi-intake-smoke/DEMO_NO_PUBLICAR.mp4
+          ffprobe -v error -show_entries format=duration:stream=codec_name -of json disi-intake-smoke/DEMO_NO_PUBLICAR.mp4 > disi-intake-smoke/probe.json
+          python - <<'PY'
+          import json
+          d=json.load(open('disi-intake-smoke/probe.json'))
+          assert 11.5 < float(d['format']['duration']) < 12.5, d
+          s=json.load(open('disi-intake-smoke/storyboard.json'))
+          assert s['publication_enabled'] is False
+          assert s['approval'] == 'PENDING_HUMAN_EDITOR'
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DISI-Reels-Intake-SMOKE-${{ github.run_number }}
+          path: disi-intake-smoke/
+          retention-days: 7
