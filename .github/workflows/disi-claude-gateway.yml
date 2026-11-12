@@ -50,7 +50,7 @@ jobs:
             Report specific files, evidence and concise recommendations.
           claude_args: |
             --model cohere/north-mini-code:free
-            --max-turns 6
+            --max-turns 14
             --allowedTools "Read,Glob,Grep"
             --disallowedTools "Bash,Edit,Write,MultiEdit,NotebookEdit,WebFetch,WebSearch"
         env:
