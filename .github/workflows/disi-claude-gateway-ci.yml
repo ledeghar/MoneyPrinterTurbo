@@ -1,0 +1,26 @@
+name: DISI Claude Gateway - static validation
+on:
+  pull_request:
+    paths:
+      - 'scripts/disi_claude_gateway.py'
+      - 'tests/test_disi_claude_gateway.py'
+      - '.github/workflows/disi-claude-gateway*.yml'
+      - 'docs/automation/DISI-CLAUDE-*.md'
+  push:
+    branches: ['disi/claude-remote-gateway-20261112']
+    paths:
+      - 'scripts/disi_claude_gateway.py'
+      - 'tests/test_disi_claude_gateway.py'
+      - '.github/workflows/disi-claude-gateway*.yml'
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run policy tests without API or secrets
+        run: python3 -m unittest discover -s tests -p test_disi_claude_gateway.py -v
+      - name: Compile Python bridge
+        run: python3 -m py_compile scripts/disi_claude_gateway.py
