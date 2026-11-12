@@ -1,47 +1,53 @@
 #!/usr/bin/env python3
-"""Validate owner-only public GitHub issue commands before Claude is launched.
+"""Owner-authored same-repository PR task validation for DISI Claude Gateway.
 
-No secrets, third-party libraries, network access, or GitHub mutations.
+Static validation only: no network, shell execution, credentials or GitHub writes.
 """
 from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
-
-TITLE_PREFIX = "[DISI-CLAUDE]"
 OWNER = "ledeghar"
+REPO = "ledeghar/MoneyPrinterTurbo"
+PREFIX = "[DISI-CLAUDE]"
 MAX_CHARS = 2500
-DANGEROUS_PATTERNS = (
-    "sk-or-", "ghp_", "github_pat_", "-----begin private key",
-    "anthropic_api_key=", "anthropic_auth_token=",
-)
+SUSPICIOUS = ("sk-or-", "ghp_", "github_pat_", "-----begin private key",
+              "anthropic_api_key=", "anthropic_auth_token=",
+              "openrouter_api_key=", "password=")
 
-def validate_event(payload: dict) -> dict:
-    if payload.get("action") != "opened":
-        raise ValueError("Only newly opened tasks can start a remote execution")
-    issue = payload.get("issue") or {}
-    user = issue.get("user") or {}
-    title = issue.get("title") or ""
-    body = issue.get("body") or ""
-    if user.get("login") != OWNER:
-        raise ValueError("Only the account owner may start an agent")
-    if not title.startswith(TITLE_PREFIX):
-        raise ValueError("Missing DISI task prefix")
-    if not isinstance(body, str) or not (15 <= len(body) <= MAX_CHARS):
-        raise ValueError("Task body must contain 15-2500 characters")
-    if any(s in body.lower() for s in DANGEROUS_PATTERNS):
-        raise ValueError("Possible credential in issue; never use public issues for secrets")
-    if issue.get("pull_request"):
-        raise ValueError("Only ordinary issues may run")
-    return {"issue_number": int(issue["number"]), "task_length": len(body), "mode": "READ_ONLY"}
+def validate_request(event: dict, payload: dict) -> dict:
+    if event.get("action") not in ("opened", "synchronize", "reopened"):
+        raise ValueError("Only opening or updating an authorized PR is permitted")
+    pr = event.get("pull_request") or {}
+    if (pr.get("user") or {}).get("login") != OWNER:
+        raise ValueError("PR owner is not authorized")
+    if not str(pr.get("title", "")).startswith(PREFIX):
+        raise ValueError("Required DISI task PR title prefix missing")
+    head = pr.get("head") or {}
+    if (head.get("repo") or {}).get("full_name") != REPO:
+        raise ValueError("Fork PRs must never receive provider credentials")
+    if payload.get("schema") != "disi-claude-task/1":
+        raise ValueError("Invalid schema")
+    if payload.get("approved_by") != OWNER or payload.get("mode") != "READ_ONLY":
+        raise ValueError("Only explicitly owner-approved read-only tasks are permitted")
+    task = payload.get("task")
+    if not isinstance(task, str) or len(task.strip()) < 15 or len(task) > MAX_CHARS:
+        raise ValueError("Task must be between 15 and 2500 characters")
+    if any(s in task.lower() for s in SUSPICIOUS):
+        raise ValueError("Possible secret detected in public task")
+    if payload.get("publish") is not False or payload.get("spend") is not False:
+        raise ValueError("No publication or paid inference is authorized")
+    if not isinstance(payload.get("request_id"),str) or len(payload["request_id"]) < 8:
+        raise ValueError("Missing request id")
+    return {"number":int(pr["number"]), "request_id":payload["request_id"],
+            "task_length":len(task), "mode":"READ_ONLY"}
 
 def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--event", type=Path, required=True)
-    args = parser.parse_args()
-    outcome = validate_event(json.loads(args.event.read_text(encoding="utf-8")))
-    print("DISI owner task validated: issue #{} / {} characters / {}".format(
-        outcome["issue_number"], outcome["task_length"], outcome["mode"]))
-
-if __name__ == "__main__":
-    main()
+    p=argparse.ArgumentParser()
+    p.add_argument("--event",type=Path,required=True)
+    p.add_argument("--request",type=Path,required=True)
+    a=p.parse_args()
+    outcome=validate_request(json.loads(a.event.read_text(encoding="utf-8")),json.loads(a.request.read_text(encoding="utf-8")))
+    print("DISI PR #{} / task {} / length {} / {}".format(
+        outcome["number"],outcome["request_id"],outcome["task_length"],outcome["mode"]))
+if __name__=="__main__":main()
