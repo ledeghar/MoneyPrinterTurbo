@@ -1,0 +1,107 @@
+{
+  "schema_version": 1,
+  "imprint": "Media News by DISI",
+  "author": "Juan Manuel Ledesma",
+  "language": "es",
+  "site_title": "Libros de Juan Manuel Ledesma | Media News by DISI",
+  "books": [
+    {
+      "slug": "alepo",
+      "title": "ALEPO",
+      "subtitle": "Los cristianos olvidados",
+      "strapline": "El día que Roma dejó caer la cruz",
+      "locations": [
+        "Siria",
+        "Alepo"
+      ],
+      "description": "Una obra de Juan Manuel Ledesma sobre la guerra de Siria, la persecución de comunidades cristianas y las vidas atrapadas en el conflicto. Narrativa basada en acontecimientos reales.",
+      "edition_ids": [
+        {
+          "vendor": "Amazon KDP",
+          "isbn13": "9798167321427",
+          "asin": "B0HQ58WM3Y"
+        }
+      ],
+      "purchase_links": [
+        {
+          "label": "Ver ALEPO en Amazon España",
+          "url": "https://www.amazon.es/dp/B0HQ58WM3Y",
+          "source": "KDP comunicado por el autor; enlace por ASIN",
+          "link_check": "PENDING_LIVE_CHECK"
+        }
+      ],
+      "themes": [
+        {
+          "hook": "Alepo no es una noticia de archivo",
+          "angle": "La guerra continúa en la memoria de quienes la vivieron."
+        },
+        {
+          "hook": "¿Qué ocurre cuando una ciudad queda aislada?",
+          "angle": "Los civiles y sus decisiones frente a una guerra."
+        },
+        {
+          "hook": "Un libro sobre vidas reales",
+          "angle": "La experiencia humana detrás de los titulares sobre Siria."
+        },
+        {
+          "hook": "La historia que merece ser contada",
+          "angle": "La persecución y el desplazamiento de comunidades durante el conflicto sirio."
+        }
+      ]
+    },
+    {
+      "slug": "jartum",
+      "title": "JARTUM",
+      "subtitle": "Los que quedaron atrás",
+      "strapline": "Abril de 2023 · Sudán",
+      "locations": [
+        "Sudán",
+        "Jartum"
+      ],
+      "description": "En abril de 2023, Jartum quedó atrapada en una guerra. Un testimonio sobre civiles, evacuaciones, incertidumbre y quienes quedaron fuera de los planes de salida.",
+      "edition_ids": [
+        {
+          "vendor": "Amazon KDP",
+          "isbn13": "9798165874536",
+          "asin": "B0HPRHJNJ1"
+        },
+        {
+          "vendor": "Lulu",
+          "isbn13": "9781326492946"
+        }
+      ],
+      "purchase_links": [
+        {
+          "label": "Ver JARTUM en Lulu",
+          "url": "https://www.lulu.com/es/shop/juan-manuel-ledesma/jartum-los-que-quedaron-atras/paperback/product-m2rdqz7.html",
+          "source": "Ficha pública de Lulu consultada el 11-11-2026",
+          "link_check": "PUBLIC_PAGE_CONFIRMED"
+        },
+        {
+          "label": "Ver JARTUM en Amazon España",
+          "url": "https://www.amazon.es/dp/B0HPRHJNJ1",
+          "source": "KDP comunicado por el autor; enlace por ASIN",
+          "link_check": "PENDING_LIVE_CHECK"
+        }
+      ],
+      "themes": [
+        {
+          "hook": "En Jartum, muchos no pudieron salir",
+          "angle": "La historia humana de quienes quedaron fuera de las evacuaciones de 2023."
+        },
+        {
+          "hook": "Un fotógrafo ante una ciudad en guerra",
+          "angle": "El testimonio de una ciudad y sus civiles en abril de 2023."
+        },
+        {
+          "hook": "La guerra no termina al evacuar",
+          "angle": "Quienes permanecen atrás también tienen historias que contar."
+        },
+        {
+          "hook": "JARTUM: Los que quedaron atrás",
+          "angle": "Una crónica de incertidumbre, resistencia y decisiones difíciles."
+        }
+      ]
+    }
+  ]
+}

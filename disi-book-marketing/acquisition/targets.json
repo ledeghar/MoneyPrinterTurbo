@@ -1,0 +1,168 @@
+{
+  "schema": "disi-buyer-acquisition/0.1",
+  "checked_on": "2026-11-11",
+  "purpose": "Find real readers and trusted editorial amplifiers, not payment services",
+  "rules": [
+    "No unsolicited bulk email or DM automation",
+    "Never pay for reviews or promise a favorable review",
+    "Do not claim these services have agreed to cover our books",
+    "Use only public submission/contact channels, and review each pitch",
+    "No fabricated sales, reach, or conversion data"
+  ],
+  "targets": [
+    {
+      "id": "amazon-author-central",
+      "name": "Amazon Author Central",
+      "type": "reader_marketplace",
+      "priority": "A",
+      "books": [
+        "alepo",
+        "jartum"
+      ],
+      "contact": "account_setup",
+      "url": "https://kdp.amazon.com/es_ES/help/topic/G200644310",
+      "evidence": "Official KDP author page instructions, free to join",
+      "ask": "Reclamar página de autor y asociar ambas fichas; optimizar biografía y descripciones",
+      "constraint": "Requires author KDP account; no automated access"
+    },
+    {
+      "id": "goodreads-author",
+      "name": "Goodreads Author Program",
+      "type": "reader_community",
+      "priority": "A",
+      "books": [
+        "alepo",
+        "jartum"
+      ],
+      "contact": "account_setup",
+      "url": "https://www.goodreads.com/author/program",
+      "evidence": "Official free author program with published book",
+      "ask": "Reclamar perfil, añadir obras y participar con autenticidad en comunidad de lectores",
+      "constraint": "Approval by Goodreads, book must exist in database; no spam"
+    },
+    {
+      "id": "indielift",
+      "name": "IndieLift",
+      "type": "author_crosspromotion",
+      "priority": "A",
+      "books": [
+        "alepo",
+        "jartum"
+      ],
+      "contact": "account_setup",
+      "url": "https://getindielift.com/es-es/",
+      "evidence": "Service describes no paid subscription and reciprocal promotion",
+      "ask": "Registrar títulos y activar promoción cruzada recíproca con autores afines",
+      "constraint": "Requires genuine reciprocal promotions; no immediate guaranteed exposure"
+    },
+    {
+      "id": "la-trinchera",
+      "name": "La trinchera de los libros",
+      "type": "review_or_interview",
+      "priority": "A",
+      "books": [
+        "alepo",
+        "jartum"
+      ],
+      "contact": "public_form",
+      "url": "https://www.latrincheradeloslibros.es/contacto",
+      "evidence": "Contact page explicitly accepts collaborations and interview proposals",
+      "ask": "Proponer entrevista con corresponsal y libros sobre Alepo/Jartum",
+      "constraint": "Independent editorial decision; no guarantee of inclusion"
+    },
+    {
+      "id": "travesura-realizada",
+      "name": "Travesura Realizada Podcast",
+      "type": "review_or_interview",
+      "priority": "B",
+      "books": [
+        "alepo",
+        "jartum"
+      ],
+      "contact": "public_contact_page",
+      "url": "https://www.travesurarealizada.es/contacto/",
+      "evidence": "Page invites authors and publishers to ask for collaborations/interviews",
+      "ask": "Proponer entrevista sobre narrar acontecimientos reales desde la experiencia directa",
+      "constraint": "Editorial capacity limited; avoid promising review"
+    },
+    {
+      "id": "noches-historia",
+      "name": "Noches de Historia",
+      "type": "history_podcast",
+      "priority": "B",
+      "books": [
+        "alepo",
+        "jartum"
+      ],
+      "contact": "public_business_email",
+      "email": "contacto@ivanpatxi.es",
+      "url": "https://www.ivanpatxi.es/",
+      "evidence_url": "https://podcasts-en-espanol.com/podcast/noches-de-historia",
+      "evidence": "Public professional contact cited in program description",
+      "ask": "Proponer episodio narrativo sobre civiles en Siria o evacuaciones en Sudán",
+      "constraint": "Podcast may choose not to cover contemporary events"
+    },
+    {
+      "id": "revista-libros",
+      "name": "Revista de Libros",
+      "type": "literary_review",
+      "priority": "B",
+      "books": [
+        "alepo",
+        "jartum"
+      ],
+      "contact": "public_business_email",
+      "email": "info@revistadelibros.com",
+      "url": "https://www.revistadelibros.com/contacto/",
+      "evidence": "Publication publishes literary criticism and lists general email",
+      "ask": "Presentar novedad editorial para valoración crítica independiente",
+      "constraint": "Not a dedicated unsolicited-book review submission; ask first"
+    },
+    {
+      "id": "republica-libros",
+      "name": "La República de los Libros",
+      "type": "literary_review",
+      "priority": "B",
+      "books": [
+        "alepo",
+        "jartum"
+      ],
+      "contact": "public_business_email",
+      "email": "editorial@larepublicadeloslibros.com",
+      "url": "https://larepublicadeloslibros.com/aviso-legal/",
+      "evidence": "Outlet lists history, memoir and essay reviews; editorial contact public",
+      "ask": "Enviar ficha y ofrecer ejemplar digital de lectura para reseña libre",
+      "constraint": "Ask consent before sending files; no guaranteed publication"
+    },
+    {
+      "id": "historias-papel",
+      "name": "Historias de papel",
+      "type": "literature_podcast",
+      "priority": "B",
+      "books": [
+        "alepo",
+        "jartum"
+      ],
+      "contact": "public_website",
+      "url": "https://historiasdepapel.es/",
+      "evidence": "Active 2026 interviews about published books including history and war",
+      "ask": "Solicitar vía canal oficial una entrevista literaria sobre Jartum y Alepo",
+      "constraint": "Contact method must be verified; do not invent an email"
+    },
+    {
+      "id": "histocast",
+      "name": "HistoCast",
+      "type": "history_podcast",
+      "priority": "C",
+      "books": [
+        "alepo",
+        "jartum"
+      ],
+      "contact": "public_website",
+      "url": "https://www.histocast.com/",
+      "evidence": "History/military podcast active and published as of 2026",
+      "ask": "Proponer conversación sobre la experiencia documental de conflictos contemporáneos",
+      "constraint": "Historical content focus; contact method not verified"
+    }
+  ]
+}
