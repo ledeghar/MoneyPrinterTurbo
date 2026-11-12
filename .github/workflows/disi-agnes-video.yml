@@ -1,0 +1,68 @@
+name: DISI Agnes - optional AI video clip
+
+on:
+  pull_request:
+    paths:
+      - 'disi-agnes/**'
+      - '.claude/skills/disi-agnes-video/**'
+      - '.github/workflows/disi-agnes-video.yml'
+  workflow_dispatch:
+    inputs:
+      prompt:
+        description: 'Cleared public/fictional scene prompt; never HUMINT or private data'
+        required: true
+        type: string
+      seconds:
+        description: 'Clip length in seconds (not a complete reel)'
+        required: true
+        type: choice
+        default: '5'
+        options:
+          - '4'
+          - '5'
+          - '8'
+          - '10'
+          - '12'
+      execute:
+        description: 'Actually generate clip via Agnes (requires AGNES_API_KEY secret)'
+        required: true
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: disi-agnes-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  optional-agnes-clip:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      VIDEO_PROMPT: ${{ inputs.prompt || 'A fictional cinematic aerial view of a coastal village at dawn' }}
+      AGNES_API_KEY: ${{ secrets.AGNES_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Run offline bridge tests
+        run: python -m unittest discover -s disi-agnes -p 'test_*.py' -v
+      - name: Offline preflight (default)
+        if: ${{ github.event_name == 'pull_request' || !inputs.execute }}
+        run: python disi-agnes/agnes_video.py --dry-run --seconds '${{ inputs.seconds || '5' }}'
+      - name: Generate optional draft (no upload to social media)
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.execute }}
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -qq -y ffmpeg
+          python disi-agnes/agnes_video.py --execute --seconds '${{ inputs.seconds }}' --output-dir disi-agnes-output
+      - name: Save draft MP4 and QA metadata
+        if: ${{ inputs.execute }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: disi-agnes-draft
+          path: disi-agnes-output/
+          if-no-files-found: error
+          retention-days: 7
