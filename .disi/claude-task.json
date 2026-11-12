@@ -1,0 +1,9 @@
+{
+  "schema": "disi-claude-task/1",
+  "request_id": "20261112-claude-gateway-smoke-02",
+  "approved_by": "ledeghar",
+  "mode": "READ_ONLY",
+  "task": "Lee CLAUDE.md y resume en dos frases cómo reducir llamadas OpenRouter en DISI. Cita el archivo; no edites nada.",
+  "publish": false,
+  "spend": false
+}
