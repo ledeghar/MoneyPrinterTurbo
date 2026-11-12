@@ -1,9 +1,9 @@
 {
   "schema": "disi-claude-task/1",
-  "request_id": "20261112-claude-gateway-smoke-01",
+  "request_id": "20261112-claude-gateway-smoke-02",
   "approved_by": "ledeghar",
   "mode": "READ_ONLY",
-  "task": "Revisa CLAUDE.md, la skill disi-efficient-agents y el flujo MNShort. Indica tres medidas para trabajar con menos llamadas gratuitas de OpenRouter. No modifiques archivos y cita las rutas revisadas.",
+  "task": "Lee CLAUDE.md y resume en dos frases cómo reducir llamadas OpenRouter en DISI. Cita el archivo; no edites nada.",
   "publish": false,
   "spend": false
 }
